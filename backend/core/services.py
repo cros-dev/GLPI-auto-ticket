@@ -24,12 +24,38 @@ def get_category_path(category):
         list: Lista de nomes de categorias do nível raiz até a categoria atual
         Exemplo: ['Requisição', 'Acesso', 'AD', 'Criação de Usuário / Conta']
     """
+    if hasattr(category, 'full_path') and category.full_path:
+        return [part.strip() for part in category.full_path.split('>') if part.strip()]
+    
     path = []
     current = category
     while current:
         path.insert(0, current.name)
         current = current.parent
     return path
+
+
+def determine_ticket_type(path_parts):
+    """
+    Determina se uma categoria pertence a Incidente ou Requisição.
+    
+    Args:
+        path_parts (list[str]): Caminho da categoria
+    
+    Returns:
+        tuple: (ticket_type, ticket_type_label)
+               ticket_type -> 1 (incidente), 2 (requisição), None (indefinido)
+    """
+    if not path_parts:
+        return None, None
+    
+    normalized = [part.strip().lower() for part in path_parts if part.strip()]
+    for name in normalized:
+        if 'incidente' in name:
+            return 1, 'incidente'
+        if 'requisição' in name or 'requisicao' in name:
+            return 2, 'requisição'
+    return None, None
 
 
 def classify_ticket_simple(
@@ -74,6 +100,7 @@ def classify_ticket_simple(
     categories = GlpiCategory.objects.all()
     best_match = None
     best_match_path = None
+    best_match_parts = None
     max_score = 0
     
     for category in categories:
@@ -137,15 +164,20 @@ def classify_ticket_simple(
             max_score = score
             best_match = category
             best_match_path = full_path
+            best_match_parts = path
     
     if best_match and max_score > 0:
         confidence = 'high' if max_score >= 10 else 'medium'
+        
+        ticket_type, ticket_type_label = determine_ticket_type(best_match_parts or [])
         
         return {
             'suggested_category_name': best_match_path,
             'suggested_category_id': best_match.glpi_id,
             'confidence': confidence,
-            'classification_method': 'keywords'
+            'classification_method': 'keywords',
+            'ticket_type': ticket_type,
+            'ticket_type_label': ticket_type_label
         }
     
     return None
@@ -263,11 +295,16 @@ ID: [número do ID]"""
         if not category:
             return None
         
+        category_path = get_category_path(category)
+        ticket_type, ticket_type_label = determine_ticket_type(category_path)
+        
         return {
-            'suggested_category_name': ' > '.join(get_category_path(category)),
+            'suggested_category_name': ' > '.join(category_path),
             'suggested_category_id': category.glpi_id,
             'confidence': 'high',
-            'classification_method': 'ai'
+            'classification_method': 'ai',
+            'ticket_type': ticket_type,
+            'ticket_type_label': ticket_type_label
         }
         
     except ImportError:

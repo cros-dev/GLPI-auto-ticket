@@ -95,14 +95,13 @@ print(t.key)
   - Retorna lista de categorias GLPI salvas localmente.
 
 - `POST /api/glpi-categories/sync/`
-  - Recebe uma lista de categorias do GLPI e faz upsert no banco.
-  - Payload esperado (exemplo):
+  - Recebe um arquivo CSV exportado do GLPI (colunas `Nome completo` e `ID`) e faz upsert no banco, preservando os IDs originais.
+  - Exemplo de uso (PowerShell):
 
-```json
-[
-  {"id": 1, "name": "Rede", "parent_id": null},
-  {"id": 2, "name": "Impressoras", "parent_id": null}
-]
+```powershell
+curl -X POST http://localhost:8000/api/glpi-categories/sync/ `
+  -H "Authorization: Token b0cdfd8b96b6d643a94278785678483c44ce8e3c" `
+  -F "file=@categorias_glpi.csv"
 ```
 
 - `POST /api/tickets/classify/`
@@ -122,7 +121,10 @@ Resposta de exemplo:
 {
   "suggested_category_name": "Incidente > Equipamentos > Hardware > Impressoras > Não Imprime",
   "suggested_category_id": 15,
-  "confidence": "high"
+  "confidence": "high",
+  "classification_method": "keywords",
+  "ticket_type": 1,
+  "ticket_type_label": "incidente"
 }
 ```
 

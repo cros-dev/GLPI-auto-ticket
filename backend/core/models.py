@@ -19,6 +19,12 @@ class GlpiCategory(models.Model):
     
     glpi_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=255)
+    full_path = models.CharField(
+        max_length=1024,
+        blank=True,
+        default='',
+        help_text="Caminho completo (ex.: 'TI > Requisição > Acesso')"
+    )
     parent = models.ForeignKey(
         'self', null=True, blank=True, on_delete=models.SET_NULL, related_name='children'
     )
