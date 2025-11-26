@@ -67,6 +67,8 @@ class TicketSerializer(serializers.ModelSerializer):
             "content_html",
             "location",
             "category_name",
+            "classification_method",
+            "classification_confidence",
             "date_creation",
             "user_recipient_id",
             "user_recipient_name",
@@ -87,6 +89,8 @@ class TicketSerializer(serializers.ModelSerializer):
             "attachments",
             "last_glpi_update",
             "raw_payload",
+            "classification_method",
+            "classification_confidence",
         ]
 
 

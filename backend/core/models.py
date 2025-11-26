@@ -78,6 +78,8 @@ class Ticket(models.Model):
         on_delete=models.SET_NULL, related_name="tickets"
     )
     category_name = models.CharField(max_length=255, null=True, blank=True)
+    classification_method = models.CharField(max_length=50, null=True, blank=True)
+    classification_confidence = models.CharField(max_length=50, null=True, blank=True)
 
     # Entidade / organização
     entity_id = models.IntegerField(null=True, blank=True)

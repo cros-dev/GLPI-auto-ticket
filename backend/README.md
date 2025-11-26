@@ -105,7 +105,7 @@ curl -X POST http://localhost:8000/api/glpi-categories/sync/ `
 ```
 
 - `POST /api/tickets/classify/`
-  - Classifica um ticket e sugere categoria usando Google Gemini AI (quando disponível) ou classificação simples como fallback.
+  - Classifica um ticket e sugere categoria usando Google Gemini AI (quando disponível). Sem IA configurada, nenhum resultado é retornado (ticket fica sem categoria sugerida).
   - Payload esperado:
 
 ```json
@@ -221,7 +221,7 @@ Para usar classificação com IA via Google Gemini:
    GEMINI_API_KEY=sua_chave_aqui
    ```
 
-**Nota**: Se `GEMINI_API_KEY` não estiver configurada, o sistema usará automaticamente classificação baseada em palavras-chave como fallback.
+**Nota**: Se `GEMINI_API_KEY` não estiver configurada, o endpoint de classificação não retorna sugestões (sem fallback automático).
 
 ## Próximos passos sugeridos
 
@@ -231,4 +231,4 @@ Para usar classificação com IA via Google Gemini:
 
 ---
 
-**Status**: API básica com autenticação por token configurada. Classificação de tickets com Google Gemini AI (opcional) e fallback para classificação por palavras-chave. Pronto para integração com n8n.
+**Status**: API básica com autenticação por token configurada. Classificação de tickets com Google Gemini AI (opcional). Pronto para integração com n8n.

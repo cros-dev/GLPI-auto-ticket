@@ -70,14 +70,16 @@ class TicketAdmin(admin.ModelAdmin):
     Exibe tickets recebidos do GLPI via webhook, com conteúdo limpo (sem HTML)
     e campos organizados em seções.
     """
-    list_display = ('id', 'name', 'category_name', 'created_at')
-    list_filter = ('created_at',)
+    list_display = ('id', 'name', 'category_name', 'classification_method', 'classification_confidence', 'created_at')
+    list_filter = ('created_at', 'classification_method', 'classification_confidence')
     search_fields = ('name', 'content_html', 'id') 
     
     readonly_fields = (
         'id',
         'name', 
         'category_name', 
+        'classification_method',
+        'classification_confidence',
         'user_recipient_name', 
         'location',
         'content_text_clean', 
@@ -93,7 +95,9 @@ class TicketAdmin(admin.ModelAdmin):
                 'id', 
                 'name',                
                 'content_text_clean',
-                'category_name', 
+                'category_name',
+                'classification_method',
+                'classification_confidence',
                 'user_recipient_name', 
                 'location'
             )
@@ -139,12 +143,12 @@ class GlpiCategoryAdmin(admin.ModelAdmin):
     Configuração do admin para o modelo GlpiCategory.
     
     Exibe categorias GLPI em formato hierárquico com colunas separadas
-    para cada nível (Nível 1, 2, 3, 4) facilitando a visualização.
+    para cada nível (Nível 1, 2, 3, 4, 5) facilitando a visualização.
     """
-    list_display = ('id_display', 'level_1', 'level_2', 'level_3', 'level_4')
+    list_display = ('id_display', 'level_1', 'level_2', 'level_3', 'level_4', 'level_5', 'level_6')
     list_filter = (Level1Filter,)
     search_fields = ('name',)
-    ordering = ('name',)
+    ordering = ('glpi_id',)
     list_per_page = 100
     
     def id_display(self, obj):
@@ -216,3 +220,19 @@ class GlpiCategoryAdmin(admin.ModelAdmin):
         path = get_category_path(obj)
         return path[3] if len(path) > 3 else '-'
     level_4.short_description = 'Nível 4'
+    
+    def level_5(self, obj):
+        """
+        Retorna o nome da categoria do nível 5 da hierarquia.
+        """
+        path = get_category_path(obj)
+        return path[4] if len(path) > 4 else '-'
+    level_5.short_description = 'Nível 5'
+
+    def level_6(self, obj):
+        """
+        Retorna o nome da categoria do nível 6 da hierarquia.
+        """
+        path = get_category_path(obj)
+        return path[5] if len(path) > 5 else '-'
+    level_6.short_description = 'Nível 6'

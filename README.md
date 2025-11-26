@@ -6,7 +6,6 @@ Sistema de classificação automática de tickets do GLPI usando Django REST Fra
 
 Este projeto automatiza a classificação de tickets do GLPI (Gestionnaire Libre de Parc Informatique) através de:
 - **Classificação por IA**: Utiliza Google Gemini AI para análise inteligente do conteúdo dos tickets
-- **Fallback por palavras-chave**: Sistema de classificação baseado em palavras-chave quando a IA não está disponível
 - **Integração com n8n**: Webhook para receber tickets do GLPI via n8n
 - **Sincronização de categorias**: API para sincronizar categorias hierárquicas do GLPI
 
@@ -95,7 +94,7 @@ Para usar classificação com IA:
    GEMINI_API_KEY=sua_chave_aqui
    ```
 
-**Nota**: Se `GEMINI_API_KEY` não estiver configurada, o sistema usará automaticamente classificação baseada em palavras-chave como fallback.
+**Nota**: Se `GEMINI_API_KEY` não estiver configurada, o endpoint de classificação não retornará sugestões (sem fallback automático).
 
 ## 📡 Endpoints da API
 
@@ -118,7 +117,7 @@ Para mais detalhes, consulte o [README do backend](backend/README.md).
 ## 🔄 Fluxo de Trabalho
 
 1. **Recebimento de Ticket**: n8n envia ticket do GLPI via webhook
-2. **Classificação**: Sistema classifica o ticket usando IA (Gemini) ou palavras-chave
+2. **Classificação**: Sistema classifica o ticket usando IA (Gemini)
 3. **Atualização**: Ticket é atualizado com a categoria sugerida
 4. **Validação**: (Futuro) Validação via Zoho Cliq
 

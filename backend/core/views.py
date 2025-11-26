@@ -382,8 +382,7 @@ class SetGlpiIdView(APIView):
 
 class TicketClassificationView(APIView):
     """
-    Classifica um ticket e sugere categoria usando Google Gemini AI (quando disponível) 
-    ou classificação simples baseada em palavras-chave como fallback.
+    Classifica um ticket e sugere categoria usando Google Gemini AI (quando disponível).
     
     Endpoint: POST /api/tickets/classify/
     Requer autenticação por token.
@@ -429,7 +428,9 @@ class TicketClassificationView(APIView):
                 if suggested_category:
                     ticket.category = suggested_category
                     ticket.category_name = result["suggested_category_name"]
-                    ticket.save()
+                ticket.classification_method = result.get("classification_method")
+                ticket.classification_confidence = result.get("confidence")
+                ticket.save()
                     
             except Ticket.DoesNotExist:
                 # Se o ticket não existir, apenas retorna a classificação
@@ -441,6 +442,18 @@ class TicketClassificationView(APIView):
             response_serializer = TicketClassificationResponseSerializer(result)
             return Response(response_serializer.data, status=status.HTTP_200_OK)
         else:
+            # Quando não consegue classificar, atualiza o status para "Aprovação" (status 10)
+            glpi_ticket_id = data.get("glpi_ticket_id")
+            if glpi_ticket_id:
+                try:
+                    ticket = Ticket.objects.get(id=glpi_ticket_id)
+                    ticket.glpi_status = "Aprovação"
+                    ticket.save()
+                except Ticket.DoesNotExist:
+                    pass
+                except Exception:
+                    pass
+            
             return Response(
                 {"detail": "Não foi possível classificar o ticket. Verifique se há categorias cadastradas."},
                 status=status.HTTP_400_BAD_REQUEST
