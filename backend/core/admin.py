@@ -13,6 +13,16 @@ class Level1Filter(admin.SimpleListFilter):
     title = 'Nível 1'
     parameter_name = 'level1'
     
+    def _get_effective_level1(self, category):
+        """
+        Retorna o nome do nível 1 lógico usado nos filtros.
+        Ignora prefixos como "TI" e usa o segundo nível quando disponível.
+        """
+        path = get_category_path(category)
+        if len(path) > 1:
+            return path[1]
+        return path[0] if path else None
+    
     def lookups(self, request, model_admin):
         """
         Retorna lista de categorias do nível 1 (raiz) para o filtro.
@@ -24,8 +34,14 @@ class Level1Filter(admin.SimpleListFilter):
         Returns:
             list: Lista de tuplas (id, nome) das categorias raiz
         """
-        level1_categories = GlpiCategory.objects.filter(parent__isnull=True).order_by('name')
-        return [(cat.id, cat.name) for cat in level1_categories]
+        level_names = []
+        seen = set()
+        for category in GlpiCategory.objects.all().order_by('name'):
+            name = self._get_effective_level1(category)
+            if name and name not in seen:
+                seen.add(name)
+                level_names.append((name, name))
+        return level_names
     
     def queryset(self, request, queryset):
         """
@@ -39,11 +55,9 @@ class Level1Filter(admin.SimpleListFilter):
             QuerySet: QuerySet filtrado contendo apenas categorias do nível 1 selecionado
         """
         if self.value():
-            level1_category = GlpiCategory.objects.get(id=self.value())
             category_ids = []
             for cat in queryset:
-                path = get_category_path(cat)
-                if path and path[0] == level1_category.name:
+                if self._get_effective_level1(cat) == self.value():
                     category_ids.append(cat.id)
             return queryset.filter(id__in=category_ids)
         return queryset

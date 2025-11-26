@@ -14,7 +14,6 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse, Http404
 from django.utils import timezone
-from django.db import models
 
 from .models import GlpiCategory, Ticket, Attachment
 from .serializers import (
@@ -45,51 +44,32 @@ class GlpiCategoryListView(generics.ListAPIView):
 
 class GlpiCategorySyncView(APIView):
     """
-    Sincroniza categorias GLPI recebidas via requisição HTTP.
+    Sincroniza categorias GLPI recebidas via upload de arquivo CSV.
     
     Endpoint: POST /api/glpi/categories/sync/
-    Realiza upsert (cria novas ou atualiza existentes) processando automaticamente
-    a hierarquia a partir do formato hierárquico.
     
-    Aceita dois formatos:
-    1. JSON (formato hierárquico):
-       ["Requisição", "Requisição > Acesso", "Requisição > Acesso > AD", ...]
+    O CSV deve conter obrigatoriamente as colunas:
+        - "Nome completo": caminho hierárquico (ex.: "TI > Requisição > Acesso")
+        - "ID": identificador inteiro fornecido pelo GLPI
     
-    2. CSV (arquivo com coluna "Nome completo"):
-       Envie um arquivo CSV com a coluna "Nome completo" contendo o caminho hierárquico.
-    
-    Processa automaticamente a hierarquia e cria os relacionamentos parent/child.
+    O endpoint executa upsert usando o glpi_id informado, garantindo que o
+    relacionamento pai/filho seja recriado no Django exatamente como no GLPI.
     """
     def post(self, request):
-        # Verifica se é upload de arquivo CSV
-        if 'file' in request.FILES:
-            categories = self._parse_csv(request.FILES['file'])
-        else:
-            # Aceita lista direta ou dentro de objeto com chave "categories"
-            if isinstance(request.data, list):
-                categories = request.data
-            else:
-                categories = request.data.get("categories") or request.data
-        
-        if not isinstance(categories, list):
+        uploaded_file = request.FILES.get('file')
+        if not uploaded_file:
             return Response(
-                {"detail": "Expected a list of category paths (strings) or CSV file"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if not categories:
-            return Response(
-                {"detail": "Categories list cannot be empty"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if not isinstance(categories[0], str):
-            return Response(
-                {"detail": "Expected list of strings in hierarchical format (e.g., 'Nível 1 > Nível 2')"},
+                {"detail": "Envie um arquivo CSV usando o campo 'file'."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         try:
+            categories = self._parse_csv(uploaded_file)
+            if not categories:
+                return Response(
+                    {"detail": "Nenhuma categoria encontrada no CSV."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             result = self._process_categories(categories)
             return Response(result, status=status.HTTP_200_OK)
         except ValueError as e:
@@ -100,13 +80,13 @@ class GlpiCategorySyncView(APIView):
     
     def _parse_csv(self, file):
         """
-        Parseia arquivo CSV e extrai a coluna "Nome completo".
+        Parseia arquivo CSV e extrai as colunas "Nome completo" e "ID".
         
         Args:
             file: Arquivo CSV enviado
             
         Returns:
-            list: Lista de strings com os caminhos hierárquicos das categorias
+            list: Lista de dicionários contendo caminho completo, partes e glpi_id
             
         Raises:
             ValueError: Se houver erro ao processar o CSV
@@ -118,24 +98,63 @@ class GlpiCategorySyncView(APIView):
                 # Remove BOM se houver (utf-8-sig)
                 content = content.decode('utf-8-sig')
             
+            if not content.strip():
+                return []
+            
+            sample = content[:1024]
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=';,')
+            except Exception:
+                dialect = csv.excel
+            
             # Parseia o CSV
-            csv_reader = csv.DictReader(io.StringIO(content))
+            csv_reader = csv.DictReader(io.StringIO(content), dialect=dialect)
             categories = []
             
-            # Encontra a coluna "Nome completo" (case-insensitive)
-            column_name = None
-            for key in csv_reader.fieldnames or []:
-                if key.lower().strip() == 'nome completo':
-                    column_name = key
-                    break
+            if not csv_reader.fieldnames:
+                raise ValueError("Cabeçalho do CSV não encontrado.")
             
-            if not column_name:
-                raise ValueError("Coluna 'Nome completo' não encontrada no CSV")
+            normalized_headers = {
+                (header or '').lower().strip(): header 
+                for header in csv_reader.fieldnames
+            }
             
+            name_column = normalized_headers.get('nome completo')
+            id_column = normalized_headers.get('id')
+            
+            if not name_column or not id_column:
+                raise ValueError("As colunas 'Nome completo' e 'ID' são obrigatórias no CSV.")
+            
+            seen_ids = set()
             for row in csv_reader:
-                full_name = row.get(column_name, '').strip()
-                if full_name:
-                    categories.append(full_name)
+                full_name = (row.get(name_column) or '').strip()
+                raw_id = (row.get(id_column) or '').strip()
+                
+                if not full_name:
+                    continue
+                
+                if not raw_id:
+                    raise ValueError(f"ID ausente para a categoria '{full_name}'.")
+                
+                try:
+                    glpi_id = int(raw_id.replace('"', ''))
+                except ValueError:
+                    raise ValueError(f"ID inválido '{raw_id}' para a categoria '{full_name}'.")
+                
+                if glpi_id in seen_ids:
+                    raise ValueError(f"ID duplicado '{glpi_id}' encontrado no CSV.")
+                seen_ids.add(glpi_id)
+                
+                parts = [p.strip() for p in full_name.split('>') if p.strip()]
+                if not parts:
+                    continue
+                
+                categories.append({
+                    "full_path": ' > '.join(parts),
+                    "parts": parts,
+                    "parent_path": ' > '.join(parts[:-1]) if len(parts) > 1 else '',
+                    "glpi_id": glpi_id,
+                })
             
             return categories
             
@@ -149,66 +168,70 @@ class GlpiCategorySyncView(APIView):
         Processa lista de categorias e cria/atualiza no banco.
         
         Args:
-            categories: Lista de strings com caminhos hierárquicos
+            categories: Lista de dicionários retornados por _parse_csv
             
         Returns:
-            dict: Estatísticas de criação (created, total)
+            dict: Estatísticas de criação/atualização
         """
         created_categories = {}
         created_count = 0
+        updated_count = 0
+        cache_by_path = {}
         
-        # Calcula o próximo glpi_id disponível uma única vez
-        max_glpi_id = GlpiCategory.objects.aggregate(
-            max_id=models.Max('glpi_id')
-        )['max_id'] or 0
-        next_glpi_id = max_glpi_id + 1
-
-        for category_path in categories:
-            if not category_path or not category_path.strip():
-                continue
-                
-            parts = [p.strip() for p in category_path.split('>') if p.strip()]
-            if not parts:
-                continue
-            
-            current_path = []
+        sorted_categories = sorted(categories, key=lambda item: len(item["parts"]))
+        
+        for entry in sorted_categories:
+            category_name = entry["parts"][-1]
+            parent_path = entry["parent_path"]
             parent = None
             
-            for category_name in parts:
-                current_path.append(category_name)
-                full_path = ' > '.join(current_path)
-                
-                if full_path in created_categories:
-                    parent = created_categories[full_path]
-                else:
-                    # Verifica se já existe no banco pelo nome e parent
-                    existing = GlpiCategory.objects.filter(
-                        name=category_name,
-                        parent=parent
-                    ).first()
-                    
-                    if existing:
-                        category = existing
-                    else:
-                        # Garante que o glpi_id seja único
-                        while GlpiCategory.objects.filter(glpi_id=next_glpi_id).exists():
-                            next_glpi_id += 1
-                        
-                        category = GlpiCategory.objects.create(
-                            glpi_id=next_glpi_id,
-                            name=category_name,
-                            parent=parent
-                        )
-                        created_count += 1
-                        next_glpi_id += 1
-                    
-                    created_categories[full_path] = category
-                    parent = category
-
+            if parent_path:
+                parent = cache_by_path.get(parent_path)
+                if not parent:
+                    parent = self._find_existing_by_path(parent_path)
+                if not parent:
+                    parent_segments = [p.strip() for p in parent_path.split('>') if p.strip()]
+                    # Se o caminho pai representa apenas o primeiro nível (ex.: "TI"),
+                    # tratamos como raiz (parent=None) permitindo que o CSV use um prefixo comum.
+                    if len(parent_segments) > 1:
+                        raise ValueError(f"Categoria pai '{parent_path}' não encontrada no CSV ou no banco.")
+                    parent = None
+            
+            obj, created = GlpiCategory.objects.update_or_create(
+                glpi_id=entry["glpi_id"],
+                defaults={
+                    "name": category_name,
+                    "parent": parent,
+                    "full_path": entry["full_path"]
+                }
+            )
+            
+            cache_by_path[entry["full_path"]] = obj
+            if created:
+                created_count += 1
+            else:
+                updated_count += 1
+        
         return {
             "created": created_count,
-            "total": len(created_categories)
+            "updated": updated_count,
+            "total": GlpiCategory.objects.count()
         }
+    
+    def _find_existing_by_path(self, path):
+        """
+        Busca uma categoria existente no banco percorrendo o caminho informado.
+        """
+        if not path:
+            return None
+        
+        parts = [p.strip() for p in path.split('>') if p.strip()]
+        parent = None
+        for part in parts:
+            parent = GlpiCategory.objects.filter(name=part, parent=parent).first()
+            if not parent:
+                return None
+        return parent
 
 
 # =========================================================

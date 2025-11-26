@@ -149,3 +149,13 @@ class TicketClassificationResponseSerializer(serializers.Serializer):
     suggested_category_id = serializers.IntegerField(allow_null=True)
     confidence = serializers.CharField(help_text="Nível de confiança: high, medium, low")
     classification_method = serializers.CharField(help_text="Método usado: 'ai' (Google Gemini) ou 'keywords' (palavras-chave)")
+    ticket_type = serializers.IntegerField(
+        allow_null=True,
+        required=False,
+        help_text="1 = incidente, 2 = requisição"
+    )
+    ticket_type_label = serializers.CharField(
+        allow_null=True,
+        required=False,
+        help_text="Nome do tipo (incidente/requisição)"
+    )

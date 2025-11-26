@@ -109,7 +109,7 @@ Authorization: Token <seu_token_aqui>
 ### Endpoints Disponíveis
 
 - `GET /api/glpi-categories/` - Lista categorias GLPI
-- `POST /api/glpi-categories/sync/` - Sincroniza categorias do GLPI
+- `POST /api/glpi-categories/sync/` - Sincroniza categorias do GLPI via upload CSV (`Nome completo`, `ID`)
 - `POST /api/tickets/webhook/` - Webhook para receber tickets do GLPI via n8n
 - `POST /api/tickets/classify/` - Classifica um ticket e sugere categoria
 
