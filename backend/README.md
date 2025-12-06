@@ -105,28 +105,69 @@ curl -X POST http://localhost:8000/api/glpi-categories/sync/ `
 ```
 
 - `POST /api/tickets/classify/`
-  - Classifica um ticket e sugere categoria usando Google Gemini AI (quando disponível) ou classificação simples como fallback.
+  - Classifica um ticket e sugere categoria usando Google Gemini AI (quando disponível). Sem IA configurada, nenhum resultado é retornado.
+  - Se não encontrar categoria exata, gera uma sugestão de nova categoria e salva para revisão manual.
   - Payload esperado:
 
 ```json
 {
   "title": "Impressora não funciona",
-  "content": "A impressora do setor não puxa papel..."
+  "content": "A impressora do setor não puxa papel...",
+  "glpi_ticket_id": 123
 }
 ```
 
-Resposta de exemplo:
+Resposta de exemplo (categoria encontrada):
 
 ```json
 {
-  "suggested_category_name": "Incidente > Equipamentos > Hardware > Impressoras > Não Imprime",
+  "suggested_category_name": "TI > Incidente > Equipamentos > Hardware > Impressoras > Não Imprime",
   "suggested_category_id": 15,
   "confidence": "high",
-  "classification_method": "keywords",
+  "classification_method": "ai",
   "ticket_type": 1,
   "ticket_type_label": "incidente"
 }
 ```
+
+Resposta de exemplo (categoria não encontrada - status 400):
+
+```json
+{
+  "detail": "Não foi possível classificar o ticket. Verifique se há categorias cadastradas. Uma sugestão de categoria foi criada e está aguardando revisão no admin."
+}
+```
+
+- `GET /api/category-suggestions/`
+  - Lista todas as sugestões de categorias geradas pela IA, com filtros por status (pending, approved, rejected).
+
+- `POST /api/category-suggestions/preview/`
+  - Gera uma prévia de sugestão de categoria sem salvar no banco. Útil para testar e validar antes de criar categorias no GLPI.
+  - Payload esperado:
+
+```json
+{
+  "title": "Apoio para transmissão",
+  "content": "Preciso de suporte para montagem de setup de vídeo conferência..."
+}
+```
+
+Resposta:
+
+```json
+{
+  "suggested_path": "TI > Requisição > Administrativo > Montagem de Setup > Transmissão/Vídeo Conferência",
+  "ticket_type": 2,
+  "ticket_type_label": "requisição",
+  "note": "Esta é apenas uma prévia. Para salvar a sugestão, use o endpoint de classificação de ticket."
+}
+```
+
+- `POST /api/category-suggestions/<id>/approve/`
+  - Aprova uma sugestão de categoria pendente.
+
+- `POST /api/category-suggestions/<id>/reject/`
+  - Rejeita uma sugestão de categoria pendente.
 
 ## Integração com n8n (exemplo rápido)
 
@@ -171,12 +212,19 @@ curl -X GET http://localhost:8000/api/glpi-categories/ `
   -H "Authorization: Token b0cdfd8b96b6d643a94278785678483c44ce8e3c"
 ```
 
-**Sincronizar categorias do GLPI**:
+**Sincronizar categorias do GLPI (via CSV)**:
 ```powershell
 curl -X POST http://localhost:8000/api/glpi-categories/sync/ `
   -H "Authorization: Token b0cdfd8b96b6d643a94278785678483c44ce8e3c" `
+  -F "file=@categorias_glpi.csv"
+```
+
+**Gerar prévia de sugestão de categoria**:
+```powershell
+curl -X POST http://localhost:8000/api/category-suggestions/preview/ `
+  -H "Authorization: Token b0cdfd8b96b6d643a94278785678483c44ce8e3c" `
   -H "Content-Type: application/json" `
-  -d "[{\"id\": 1, \"name\": \"Rede\", \"parent_id\": null}]"
+  -d "{\"title\":\"Problema com impressora\",\"content\":\"A impressora não funciona\"}"
 ```
 
 ### Exemplo em Python (requests)
@@ -221,14 +269,30 @@ Para usar classificação com IA via Google Gemini:
    GEMINI_API_KEY=sua_chave_aqui
    ```
 
-**Nota**: Se `GEMINI_API_KEY` não estiver configurada, o sistema usará automaticamente classificação baseada em palavras-chave como fallback.
+**Nota**: Se `GEMINI_API_KEY` não estiver configurada, o endpoint de classificação não retorna sugestões. O sistema depende exclusivamente do Google Gemini AI para classificação.
 
-## Próximos passos sugeridos
+## Funcionalidades Implementadas
 
-- Implementar sincronização automática com GLPI (script/management command)
-- Implementar criação de ticket no GLPI e o fluxo de validação via Zoho Cliq
-- Testes manuais com n8n (webhook/HTTP Request)
+✅ **Classificação Automática de Tickets**
+- Classificação usando Google Gemini AI
+- Geração automática de sugestões quando não encontra categoria exata
+- Metadados de classificação (método e confiança) armazenados no ticket
+
+✅ **Sugestões de Categorias**
+- Geração automática de sugestões hierárquicas quando categoria exata não é encontrada
+- Endpoint de prévia para testar sugestões sem salvar
+- Revisão manual via Django Admin
+- Aprovação/rejeição de sugestões via API
+
+✅ **Sincronização de Categorias**
+- Importação via CSV com preservação de IDs do GLPI
+- Suporte a hierarquias complexas (até 6 níveis)
+- Tratamento do prefixo "TI" nos caminhos
+
+✅ **Gerenciamento de Tickets Não Classificados**
+- Tickets sem classificação são automaticamente marcados com status "Aprovação" (status 10) no GLPI
+- Integração com n8n para atualização automática de status
 
 ---
 
-**Status**: API básica com autenticação por token configurada. Classificação de tickets com Google Gemini AI (opcional) e fallback para classificação por palavras-chave. Pronto para integração com n8n.
+**Status**: Sistema completo de classificação automática com IA, geração de sugestões e revisão manual. Pronto para produção.

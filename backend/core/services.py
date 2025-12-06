@@ -2,16 +2,14 @@
 Serviços auxiliares para processamento de tickets.
 
 Este módulo contém funções para classificação automática de tickets usando
-Google Gemini AI (quando disponível) ou classificação simples baseada em palavras-chave como fallback.
+Google Gemini AI. 
 """
 import logging
 from typing import Optional, Dict
 from django.conf import settings
-from .models import GlpiCategory
-from .keywords import KEYWORD_MAPPING
+from .models import GlpiCategory, CategorySuggestion, Ticket 
 
 logger = logging.getLogger(__name__)
-
 
 def get_category_path(category):
     """
@@ -41,7 +39,7 @@ def determine_ticket_type(path_parts):
     
     Args:
         path_parts (list[str]): Caminho da categoria
-    
+        
     Returns:
         tuple: (ticket_type, ticket_type_label)
                ticket_type -> 1 (incidente), 2 (requisição), None (indefinido)
@@ -55,132 +53,10 @@ def determine_ticket_type(path_parts):
             return 1, 'incidente'
         if 'requisição' in name or 'requisicao' in name:
             return 2, 'requisição'
+        # "Administrativo" geralmente indica requisição
+        if 'administrativo' in name:
+            return 2, 'requisição'
     return None, None
-
-
-def classify_ticket_simple(
-    title: str,
-    content: str
-) -> Optional[Dict[str, any]]:
-    """
-    Classificação simples baseada em palavras-chave.
-    
-    Utiliza o caminho hierárquico completo das categorias para encontrar
-    a melhor correspondência com base em palavras-chave no título e conteúdo.
-    
-    Args:
-        title (str): Título do ticket
-        content (str): Conteúdo/descrição do ticket
-        
-    Returns:
-        Optional[Dict[str, any]]: Dicionário com:
-            - 'suggested_category_name': Nome completo da categoria sugerida (caminho hierárquico)
-            - 'suggested_category_id': ID GLPI da categoria
-            - 'confidence': 'medium' ou 'high'
-        Retorna None se nenhuma correspondência for encontrada.
-    """
-    text = f"{title} {content}".lower()
-    
-    is_incident = any(word in text for word in [
-        'problema', 'erro', 'falha', 'não funciona', 'não está funcionando',
-        'não imprime', 'não liga', 'travando', 'lento', 'sem conexão',
-        'indisponível', 'inacessível', 'bloqueado', 'tela azul', 'crash',
-        'travamento', 'não abre', 'não responde', 'sem resposta'
-    ])
-    
-    is_request = any(word in text for word in [
-        'solicitar', 'solicitação', 'pedido', 'preciso', 'precisamos',
-        'quero', 'gostaria', 'instalar', 'instalação', 'novo', 'nova',
-        'criar', 'criação', 'adicionar', 'adicionar', 'configurar'
-    ])
-    
-    software_indicators = ['office', 'word', 'excel', 'powerpoint', 'outlook', 'software', 'programa', 'aplicativo', 'app']
-    has_software_indicator = any(indicator in text for indicator in software_indicators)
-    
-    categories = GlpiCategory.objects.all()
-    best_match = None
-    best_match_path = None
-    best_match_parts = None
-    max_score = 0
-    
-    for category in categories:
-        path = get_category_path(category)
-        full_path = ' > '.join(path)
-        full_path_lower = full_path.lower()
-        
-        score = 0
-        
-        path_first_level = path[0].lower() if path else ''
-        type_match = False
-        
-        if path_first_level == 'incidente' and is_incident:
-            score += 30
-            type_match = True
-        elif path_first_level == 'requisição' and is_request:
-            score += 30
-            type_match = True
-        elif path_first_level == 'incidente' and is_request:
-            score -= 20
-        elif path_first_level == 'requisição' and is_incident:
-            score -= 20
-        
-        category_name_lower = category.name.lower()
-        words = text.split()
-        
-        if category_name_lower in text:
-            score += 20
-        
-        if category_name_lower in words:
-            score += 15
-        
-        for keyword, synonyms, weight in KEYWORD_MAPPING:
-            if keyword in full_path_lower:
-                for synonym in synonyms:
-                    if synonym in text:
-                        depth_bonus = len(path) * 3
-                        score += weight + depth_bonus
-                        
-                        if has_software_indicator and 'software' in full_path_lower:
-                            score += 15
-                        
-                        break
-        
-        if has_software_indicator and 'hardware' in full_path_lower and 'software' not in full_path_lower:
-            score -= 30
-        
-        if score == 0 or (score < 10 and not type_match):
-            for path_part in path:
-                path_part_lower = path_part.lower()
-                if path_part_lower in text and len(path_part_lower) > 4:
-                    if has_software_indicator and path_part_lower in ['hardware', 'computadores', 'computador']:
-                        score -= 5
-                    else:
-                        score += 1
-        
-        if score > 0:
-            score += len(path) * 2
-        
-        if score > max_score:
-            max_score = score
-            best_match = category
-            best_match_path = full_path
-            best_match_parts = path
-    
-    if best_match and max_score > 0:
-        confidence = 'high' if max_score >= 10 else 'medium'
-        
-        ticket_type, ticket_type_label = determine_ticket_type(best_match_parts or [])
-        
-        return {
-            'suggested_category_name': best_match_path,
-            'suggested_category_id': best_match.glpi_id,
-            'confidence': confidence,
-            'classification_method': 'keywords',
-            'ticket_type': ticket_type,
-            'ticket_type_label': ticket_type_label
-        }
-    
-    return None
 
 
 def get_categories_for_ai():
@@ -225,7 +101,7 @@ def classify_ticket_with_gemini(
     api_key = getattr(settings, 'GEMINI_API_KEY', None)
     
     if not api_key:
-        logger.debug("GEMINI_API_KEY não configurada, usando fallback para palavras-chave")
+        logger.debug("GEMINI_API_KEY não configurada, classificação será ignorada")
         return None
     
     try:
@@ -239,13 +115,18 @@ def classify_ticket_with_gemini(
 Categorias disponíveis (formato: Nível 1 > Nível 2 > Nível 3 > ...):
 {categories_text}
 
-Analise o seguinte ticket e classifique-o na categoria mais apropriada da lista acima.
+Analise o seguinte ticket e classifique-o na categoria MAIS ESPECÍFICA e APROPRIADA da lista acima.
+
+IMPORTANTE: 
+- Só retorne uma categoria se ela se encaixar PERFEITAMENTE no contexto do ticket
+- Prefira categorias mais específicas (com mais níveis) quando disponíveis
+- Se a categoria mais próxima for muito genérica (ex: apenas "Periféricos" sem subcategoria), responda "Nenhuma" para que possamos criar uma categoria mais específica
 
 Título: {title}
 Conteúdo: {content}
 
-Responda APENAS com o caminho completo da categoria (ex: "Incidente > Equipamentos > Hardware > Computadores > Não Liga / Travando") e o ID entre parênteses (ex: "(84)"). 
-Se não encontrar uma categoria adequada, responda "Nenhuma".
+Responda APENAS com o caminho completo da categoria (ex: "TI > Incidente > Equipamentos > Hardware > Computadores > Não Liga / Travando") e o ID entre parênteses (ex: "(84)"). 
+Se não encontrar uma categoria adequada e específica, responda "Nenhuma".
 
 Formato da resposta:
 CATEGORIA: [caminho completo]
@@ -296,6 +177,23 @@ ID: [número do ID]"""
             return None
         
         category_path = get_category_path(category)
+        
+        # Lista de categorias genéricas que não devem ser aceitas sem subcategoria específica
+        generic_categories = ['periféricos', 'outros', 'outros acessos', 'outros equipamentos', 
+                             'solicitação geral', 'problema geral', 'equipamentos', 'hardware',
+                             'software', 'sistemas', 'acesso']
+        
+        last_level = category_path[-1].lower() if category_path else ''
+        
+        # Verifica se a categoria é muito genérica:
+        # - Menos de 4 níveis OU
+        # - Último nível é uma categoria genérica (sem subcategoria específica)
+        if len(category_path) < 4 or last_level in generic_categories:
+            # Categorias genéricas como "TI > Requisição > Equipamentos > Periféricos" 
+            # são consideradas insuficientes - vamos gerar sugestão mais específica
+            logger.info(f"Categoria muito genérica encontrada ({len(category_path)} níveis, último: '{last_level}'): {' > '.join(category_path)}. Gerando sugestão mais específica.")
+            return None
+        
         ticket_type, ticket_type_label = determine_ticket_type(category_path)
         
         return {
@@ -308,38 +206,179 @@ ID: [número do ID]"""
         }
         
     except ImportError:
-        logger.warning("Biblioteca google-genai não instalada, usando fallback para palavras-chave")
+        logger.warning("Biblioteca google-genai não instalada, classificação será ignorada")
         return None
     except Exception as e:
-        logger.warning(f"Erro ao classificar com Gemini AI: {str(e)}, usando fallback para palavras-chave")
+        logger.warning(f"Erro ao classificar com Gemini AI: {str(e)}, classificação será ignorada")
+        return None
+
+
+def generate_category_suggestion(
+    title: str,
+    content: str,
+    ticket_id: Optional[int] = None
+) -> Optional[str]:
+    """
+    Gera uma sugestão de categoria quando a IA não encontra categoria exata.
+    
+    Usa o Gemini para sugerir uma nova categoria seguindo o padrão hierárquico
+    (ex.: "TI > Requisição > Administrativo > Montagem de Setup > Transmissão/Vídeo Conferência").
+    
+    Args:
+        title (str): Título do ticket
+        content (str): Conteúdo/descrição do ticket
+        ticket_id (Optional[int]): ID do ticket para vincular a sugestão
+        
+    Returns:
+        Optional[str]: Caminho completo sugerido ou None se não conseguir gerar
+    """
+    api_key = getattr(settings, 'GEMINI_API_KEY', None)
+    
+    if not api_key:
+        return None
+    
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        
+        prompt = f"""Você é um assistente especializado em classificação de tickets de suporte técnico.
+
+Analise o seguinte ticket e sugira uma categoria hierárquica seguindo o padrão:
+TI > [Incidente/Requisição] > [Área] > [Subárea] > [Categoria Específica]
+
+Exemplos de padrões:
+- TI > Requisição > Acesso > AD > Criação de Usuário / Conta
+- TI > Incidente > Equipamentos > Hardware > Computadores > Não Liga / Travando
+- TI > Requisição > Administrativo > Montagem de Setup > Transmissão/Vídeo Conferência
+
+Título: {title}
+Conteúdo: {content}
+
+Sugira APENAS o caminho completo da categoria seguindo o padrão acima.
+Se não conseguir determinar, responda "Nenhuma".
+
+Formato da resposta:
+SUGESTÃO: [caminho completo]"""
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        response_text = response.text.strip()
+        
+        if not response_text or "Nenhuma" in response_text.lower():
+            return None
+        
+        lines = response_text.split('\n')
+        suggested_path = None
+        
+        for line in lines:
+            line_lower = line.lower()
+            if 'sugestão:' in line_lower or 'sugestao:' in line_lower:
+                suggested_path = line.split(':', 1)[1].strip() if ':' in line else line.strip()
+                break
+        
+        if not suggested_path:
+            # Tenta pegar a primeira linha que não seja vazia
+            for line in lines:
+                line = line.strip()
+                if line and not line.lower().startswith('sugestão') and not line.lower().startswith('sugestao'):
+                    suggested_path = line
+                    break
+        
+        if suggested_path and suggested_path.startswith('TI'):
+            return suggested_path
+        
+        return None
+        
+    except Exception as e:
+        logger.warning(f"Erro ao gerar sugestão de categoria: {str(e)}")
+        return None
+
+
+def save_category_suggestion(
+    ticket_id: int,
+    suggested_path: str,
+    title: str,
+    content: str
+) -> Optional[CategorySuggestion]:
+    """
+    Salva uma sugestão de categoria para revisão manual.
+    
+    Args:
+        ticket_id (int): ID do ticket
+        suggested_path (str): Caminho completo sugerido
+        title (str): Título do ticket
+        content (str): Conteúdo do ticket
+        
+    Returns:
+        Optional[CategorySuggestion]: Instância criada ou None se houver erro
+    """
+    try:
+        ticket = Ticket.objects.get(id=ticket_id)
+        
+        # Verifica se já existe sugestão pendente para este ticket
+        existing = CategorySuggestion.objects.filter(
+            ticket=ticket,
+            status='pending'
+        ).first()
+        
+        if existing:
+            # Atualiza a sugestão existente
+            existing.suggested_path = suggested_path
+            existing.ticket_title = title
+            existing.ticket_content = content[:5000]  # Limita tamanho
+            existing.save()
+            return existing
+        
+        # Cria nova sugestão
+        suggestion = CategorySuggestion.objects.create(
+            ticket=ticket,
+            suggested_path=suggested_path,
+            ticket_title=title,
+            ticket_content=content[:5000],  # Limita tamanho
+            status='pending'
+        )
+        return suggestion
+        
+    except Ticket.DoesNotExist:
+        logger.warning(f"Ticket {ticket_id} não encontrado para salvar sugestão")
+        return None
+    except Exception as e:
+        logger.error(f"Erro ao salvar sugestão de categoria: {str(e)}")
         return None
 
 
 def classify_ticket(
     title: str,
-    content: str
+    content: str,
+    ticket_id: Optional[int] = None
 ) -> Optional[Dict[str, any]]:
     """
-    Classifica um ticket tentando usar Gemini AI primeiro, com fallback para classificação simples.
+    Classifica um ticket usando Google Gemini AI.
     
-    Tenta classificar usando Google Gemini AI. Se falhar ou não estiver configurado,
-    usa classificação baseada em palavras-chave como fallback.
+    Se não encontrar categoria exata, tenta gerar uma sugestão e salva para revisão manual.
     
     Args:
         title (str): Título do ticket
         content (str): Conteúdo/descrição do ticket
+        ticket_id (Optional[int]): ID do ticket para vincular sugestões
         
     Returns:
         Optional[Dict[str, any]]: Dicionário com:
             - 'suggested_category_name': Nome completo da categoria sugerida (caminho hierárquico)
             - 'suggested_category_id': ID GLPI da categoria
-            - 'confidence': 'high' ou 'medium'
+            - 'confidence': 'high' (quando IA responde)
         Retorna None se nenhuma classificação for possível.
     """
     result = classify_ticket_with_gemini(title, content)
     
-    if result:
-        return result
+    # Se não encontrou categoria exata e temos ticket_id, tenta gerar sugestão
+    if not result and ticket_id:
+        suggested_path = generate_category_suggestion(title, content, ticket_id)
+        if suggested_path:
+            save_category_suggestion(ticket_id, suggested_path, title, content)
+            logger.info(f"Sugestão de categoria criada para ticket {ticket_id}: {suggested_path}")
     
-    return classify_ticket_simple(title, content)
+    return result
 

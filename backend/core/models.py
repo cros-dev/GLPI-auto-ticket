@@ -5,6 +5,7 @@ Este módulo contém os modelos principais:
 - GlpiCategory: Categorias GLPI para classificação de tickets
 - Ticket: Tickets recebidos do GLPI via webhook
 - Attachment: Anexos vinculados aos tickets
+- CategorySuggestion: Sugestões de categorias geradas pela IA para revisão manual
 """
 from django.db import models
 
@@ -78,6 +79,8 @@ class Ticket(models.Model):
         on_delete=models.SET_NULL, related_name="tickets"
     )
     category_name = models.CharField(max_length=255, null=True, blank=True)
+    classification_method = models.CharField(max_length=50, null=True, blank=True)
+    classification_confidence = models.CharField(max_length=50, null=True, blank=True)
 
     # Entidade / organização
     entity_id = models.IntegerField(null=True, blank=True)
@@ -134,3 +137,65 @@ class Attachment(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class CategorySuggestion(models.Model):
+    """
+    Sugestão de categoria gerada pela IA quando não encontra categoria exata.
+    
+    Armazena sugestões de novas categorias para revisão manual antes de criar
+    no GLPI e sincronizar via CSV.
+    """
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('approved', 'Aprovada'),
+        ('rejected', 'Rejeitada'),
+    ]
+    
+    ticket = models.ForeignKey(
+        Ticket, 
+        on_delete=models.CASCADE, 
+        related_name='category_suggestions',
+        help_text="Ticket que gerou esta sugestão"
+    )
+    
+    suggested_path = models.CharField(
+        max_length=1024,
+        help_text="Caminho completo sugerido (ex.: 'TI > Requisição > Administrativo > Montagem de Setup > Transmissão/Vídeo Conferência')"
+    )
+    
+    ticket_title = models.CharField(
+        max_length=255,
+        help_text="Título do ticket para contexto"
+    )
+    
+    ticket_content = models.TextField(
+        blank=True,
+        help_text="Conteúdo do ticket para contexto"
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        help_text="Status da sugestão"
+    )
+    
+    notes = models.TextField(
+        blank=True,
+        help_text="Notas adicionais sobre a sugestão"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Sugestão de Categoria'
+        verbose_name_plural = 'Sugestões de Categorias'
+
+    def __str__(self):
+        return f"{self.suggested_path} (Ticket #{self.ticket.id})"
