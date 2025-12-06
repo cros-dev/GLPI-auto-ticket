@@ -431,8 +431,8 @@ class TicketClassificationView(APIView):
                 if suggested_category:
                     ticket.category = suggested_category
                     ticket.category_name = result["suggested_category_name"]
-                ticket.classification_method = result.get("classification_method")
-                ticket.classification_confidence = result.get("confidence")
+                    ticket.classification_method = result.get("classification_method")
+                    ticket.classification_confidence = result.get("confidence")
                     ticket.save()
                     
             except Ticket.DoesNotExist:
