@@ -96,10 +96,8 @@ class GlpiCategorySyncView(APIView):
             ValueError: Se houver erro ao processar o CSV
         """
         try:
-            # Lê o arquivo como texto
             content = file.read()
             if isinstance(content, bytes):
-                # Remove BOM se houver (utf-8-sig)
                 content = content.decode('utf-8-sig')
             
             if not content.strip():
@@ -111,7 +109,6 @@ class GlpiCategorySyncView(APIView):
             except Exception:
                 dialect = csv.excel
             
-            # Parseia o CSV
             csv_reader = csv.DictReader(io.StringIO(content), dialect=dialect)
             categories = []
             
@@ -183,7 +180,6 @@ class GlpiCategorySyncView(APIView):
         updated_count = 0
         cache_by_path = {}
         
-        # Coleta todos os glpi_ids do CSV para identificar o que deve ser mantido
         csv_glpi_ids = {entry["glpi_id"] for entry in categories}
         
         sorted_categories = sorted(categories, key=lambda item: len(item["parts"]))
@@ -199,11 +195,8 @@ class GlpiCategorySyncView(APIView):
                     parent = self._find_existing_by_path(parent_path)
                 if not parent:
                     parent_segments = [p.strip() for p in parent_path.split('>') if p.strip()]
-                    # Se o caminho pai representa apenas o primeiro nível (ex.: "TI"),
-                    # tratamos como raiz (parent=None) permitindo que o CSV use um prefixo comum.
                     if len(parent_segments) > 1:
                         raise ValueError(f"Categoria pai '{parent_path}' não encontrada no CSV ou no banco.")
-                    # Se chegou aqui, parent_path tem apenas 1 nível, então parent permanece None (raiz)
             
             obj, created = GlpiCategory.objects.update_or_create(
                 glpi_id=entry["glpi_id"],
@@ -220,7 +213,6 @@ class GlpiCategorySyncView(APIView):
             else:
                 updated_count += 1
         
-        # Remove categorias que não estão no CSV (Django como espelho do GLPI)
         deleted_count = 0
         if csv_glpi_ids:
             categories_to_delete = GlpiCategory.objects.exclude(glpi_id__in=csv_glpi_ids)
@@ -382,7 +374,6 @@ class SetGlpiIdView(APIView):
             ticket.glpi_status = status_update
 
         if glpi_updates:
-            # Se houver outros campos para atualizar no futuro
             pass
 
         ticket.save()
@@ -432,13 +423,10 @@ class TicketClassificationView(APIView):
         )
         
         if result:
-            # Atualiza o ticket com a categoria sugerida
             glpi_ticket_id = data.get("glpi_ticket_id")
             
             try:
                 ticket = Ticket.objects.get(id=glpi_ticket_id)
-                
-                # Busca a categoria sugerida
                 suggested_category = GlpiCategory.objects.filter(
                     glpi_id=result["suggested_category_id"]
                 ).first()
@@ -451,16 +439,13 @@ class TicketClassificationView(APIView):
                     ticket.save()
                     
             except Ticket.DoesNotExist:
-                # Se o ticket não existir, apenas retorna a classificação
                 pass
             except Exception:
-                # Se houver erro, apenas retorna a classificação
                 pass
             
             response_serializer = TicketClassificationResponseSerializer(result)
             return Response(response_serializer.data, status=status.HTTP_200_OK)
         else:
-            # Quando não consegue classificar, atualiza o status para "Aprovação" (status 10)
             glpi_ticket_id = data.get("glpi_ticket_id")
             suggestion_created = False
             
@@ -470,7 +455,6 @@ class TicketClassificationView(APIView):
                     ticket.glpi_status = "Aprovação"
                     ticket.save()
                     
-                    # Verifica se uma sugestão foi criada
                     from .models import CategorySuggestion
                     suggestion = CategorySuggestion.objects.filter(
                         ticket=ticket,
@@ -645,11 +629,9 @@ class CategorySuggestionPreviewView(APIView):
         
         from .services import classify_ticket_with_gemini, generate_category_suggestion
         
-        # Primeiro tenta encontrar uma categoria existente
         result = classify_ticket_with_gemini(title, content)
         
         if result:
-            # Encontrou categoria existente
             return Response({
                 "suggested_path": result.get('suggested_category_name', ''),
                 "suggested_category_id": result.get('suggested_category_id'),
@@ -660,7 +642,6 @@ class CategorySuggestionPreviewView(APIView):
                 "note": "Categoria existente encontrada. Esta é apenas uma prévia."
             }, status=status.HTTP_200_OK)
         
-        # Se não encontrou categoria existente, gera uma nova sugestão
         suggested_path = generate_category_suggestion(title, content)
         
         if not suggested_path:
@@ -669,7 +650,6 @@ class CategorySuggestionPreviewView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Determina o tipo de ticket (incidente/requisição) baseado na sugestão
         from .services import determine_ticket_type
         path_parts = [part.strip() for part in suggested_path.split('>') if part.strip()]
         ticket_type, ticket_type_label = determine_ticket_type(path_parts)
