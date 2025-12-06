@@ -55,6 +55,9 @@ class GlpiCategorySyncView(APIView):
     
     O endpoint executa upsert usando o glpi_id informado, garantindo que o
     relacionamento pai/filho seja recriado no Django exatamente como no GLPI.
+    
+    IMPORTANTE: O Django funciona como espelho do GLPI. Categorias que não estão
+    no CSV serão removidas automaticamente do banco de dados.
     """
     def post(self, request):
         uploaded_file = request.FILES.get('file')
@@ -167,17 +170,21 @@ class GlpiCategorySyncView(APIView):
     def _process_categories(self, categories):
         """
         Processa lista de categorias e cria/atualiza no banco.
+        Remove categorias que não estão no CSV para manter o Django como espelho do GLPI.
         
         Args:
             categories: Lista de dicionários retornados por _parse_csv
             
         Returns:
-            dict: Estatísticas de criação/atualização
+            dict: Estatísticas de criação/atualização/remoção
         """
         created_categories = {}
         created_count = 0
         updated_count = 0
         cache_by_path = {}
+        
+        # Coleta todos os glpi_ids do CSV para identificar o que deve ser mantido
+        csv_glpi_ids = {entry["glpi_id"] for entry in categories}
         
         sorted_categories = sorted(categories, key=lambda item: len(item["parts"]))
         
@@ -196,7 +203,7 @@ class GlpiCategorySyncView(APIView):
                     # tratamos como raiz (parent=None) permitindo que o CSV use um prefixo comum.
                     if len(parent_segments) > 1:
                         raise ValueError(f"Categoria pai '{parent_path}' não encontrada no CSV ou no banco.")
-            parent = None
+                    # Se chegou aqui, parent_path tem apenas 1 nível, então parent permanece None (raiz)
             
             obj, created = GlpiCategory.objects.update_or_create(
                 glpi_id=entry["glpi_id"],
@@ -212,10 +219,18 @@ class GlpiCategorySyncView(APIView):
                 created_count += 1
             else:
                 updated_count += 1
+        
+        # Remove categorias que não estão no CSV (Django como espelho do GLPI)
+        deleted_count = 0
+        if csv_glpi_ids:
+            categories_to_delete = GlpiCategory.objects.exclude(glpi_id__in=csv_glpi_ids)
+            deleted_count = categories_to_delete.count()
+            categories_to_delete.delete()
 
         return {
             "created": created_count,
             "updated": updated_count,
+            "deleted": deleted_count,
             "total": GlpiCategory.objects.count()
         }
     
