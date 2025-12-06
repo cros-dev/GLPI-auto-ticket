@@ -94,7 +94,7 @@ Para usar classificação com IA:
    GEMINI_API_KEY=sua_chave_aqui
    ```
 
-**Nota**: Se `GEMINI_API_KEY` não estiver configurada, o endpoint de classificação não retornará sugestões (sem fallback automático).
+**Nota**: Se `GEMINI_API_KEY` não estiver configurada, o endpoint de classificação não retornará sugestões. O sistema depende exclusivamente do Google Gemini AI para classificação.
 
 ## 📡 Endpoints da API
 
@@ -111,6 +111,10 @@ Authorization: Token <seu_token_aqui>
 - `POST /api/glpi-categories/sync/` - Sincroniza categorias do GLPI via upload CSV (`Nome completo`, `ID`)
 - `POST /api/tickets/webhook/` - Webhook para receber tickets do GLPI via n8n
 - `POST /api/tickets/classify/` - Classifica um ticket e sugere categoria
+- `GET /api/category-suggestions/` - Lista sugestões de categorias pendentes
+- `POST /api/category-suggestions/preview/` - Gera prévia de sugestão de categoria (sem salvar)
+- `POST /api/category-suggestions/<id>/approve/` - Aprova uma sugestão de categoria
+- `POST /api/category-suggestions/<id>/reject/` - Rejeita uma sugestão de categoria
 
 Para mais detalhes, consulte o [README do backend](backend/README.md).
 
@@ -118,8 +122,11 @@ Para mais detalhes, consulte o [README do backend](backend/README.md).
 
 1. **Recebimento de Ticket**: n8n envia ticket do GLPI via webhook
 2. **Classificação**: Sistema classifica o ticket usando IA (Gemini)
-3. **Atualização**: Ticket é atualizado com a categoria sugerida
-4. **Validação**: (Futuro) Validação via Zoho Cliq
+   - Se encontrar categoria exata: retorna sugestão e atualiza ticket
+   - Se não encontrar: gera sugestão de nova categoria e salva para revisão manual
+3. **Atualização**: Ticket é atualizado com a categoria sugerida (se encontrada)
+4. **Tickets não classificados**: Status alterado para "Aprovação" (status 10) no GLPI
+5. **Revisão de Sugestões**: Administrador revisa sugestões no Django Admin e aprova/rejeita
 
 ## 📝 Licença
 

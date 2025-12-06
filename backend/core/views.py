@@ -5,6 +5,7 @@ Este módulo contém todas as views que expõem endpoints da API:
 - Categorias: listagem e sincronização
 - Tickets: webhook, listagem, detalhe e classificação
 - Anexos: download de arquivos
+- Sugestões de categorias: listagem, prévia, aprovação e rejeição
 """
 import csv
 import io
@@ -15,7 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse, Http404
 from django.utils import timezone
 
-from .models import GlpiCategory, Ticket, Attachment
+from .models import GlpiCategory, Ticket, Attachment, CategorySuggestion
 from .serializers import (
     GlpiCategorySerializer, 
     TicketSerializer, 
@@ -62,14 +63,14 @@ class GlpiCategorySyncView(APIView):
                 {"detail": "Envie um arquivo CSV usando o campo 'file'."},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         try:
             categories = self._parse_csv(uploaded_file)
-            if not categories:
-                return Response(
+        if not categories:
+            return Response(
                     {"detail": "Nenhuma categoria encontrada no CSV."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                status=status.HTTP_400_BAD_REQUEST
+            )
             result = self._process_categories(categories)
             return Response(result, status=status.HTTP_200_OK)
         except ValueError as e:
@@ -195,7 +196,7 @@ class GlpiCategorySyncView(APIView):
                     # tratamos como raiz (parent=None) permitindo que o CSV use um prefixo comum.
                     if len(parent_segments) > 1:
                         raise ValueError(f"Categoria pai '{parent_path}' não encontrada no CSV ou no banco.")
-                    parent = None
+            parent = None
             
             obj, created = GlpiCategory.objects.update_or_create(
                 glpi_id=entry["glpi_id"],
@@ -209,9 +210,9 @@ class GlpiCategorySyncView(APIView):
             cache_by_path[entry["full_path"]] = obj
             if created:
                 created_count += 1
-            else:
+                else:
                 updated_count += 1
-        
+
         return {
             "created": created_count,
             "updated": updated_count,
@@ -264,11 +265,11 @@ class GlpiWebhookView(APIView):
                 "location": data.get("location") or "",
                 "name": data["name"],
                 "content_html": cleaned_content,
-                "category_name": data.get("category_name", ""),
-                "entity_id": data["entity_id"],
-                "entity_name": data["entity_name"],
-                "team_assigned_id": data["team_assigned_id"],
-                "team_assigned_name": data["team_assigned_name"],
+                "category_name": data.get("category_name") or "",
+                "entity_id": data.get("entity_id"),
+                "entity_name": data.get("entity_name") or "",
+                "team_assigned_id": data.get("team_assigned_id"),
+                "team_assigned_name": data.get("team_assigned_name") or "",
                 "last_glpi_update": timezone.now(),
                 "raw_payload": request.data
             }
@@ -408,9 +409,11 @@ class TicketClassificationView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         
+        glpi_ticket_id = data.get("glpi_ticket_id")
         result = classify_ticket(
             title=data["title"],
-            content=data.get("content", "")
+            content=data.get("content", ""),
+            ticket_id=glpi_ticket_id
         )
         
         if result:
@@ -430,7 +433,7 @@ class TicketClassificationView(APIView):
                     ticket.category_name = result["suggested_category_name"]
                 ticket.classification_method = result.get("classification_method")
                 ticket.classification_confidence = result.get("confidence")
-                ticket.save()
+                    ticket.save()
                     
             except Ticket.DoesNotExist:
                 # Se o ticket não existir, apenas retorna a classificação
@@ -444,17 +447,222 @@ class TicketClassificationView(APIView):
         else:
             # Quando não consegue classificar, atualiza o status para "Aprovação" (status 10)
             glpi_ticket_id = data.get("glpi_ticket_id")
+            suggestion_created = False
+            
             if glpi_ticket_id:
                 try:
                     ticket = Ticket.objects.get(id=glpi_ticket_id)
                     ticket.glpi_status = "Aprovação"
                     ticket.save()
+                    
+                    # Verifica se uma sugestão foi criada
+                    from .models import CategorySuggestion
+                    suggestion = CategorySuggestion.objects.filter(
+                        ticket=ticket,
+                        status='pending'
+                    ).order_by('-created_at').first()
+                    
+                    if suggestion:
+                        suggestion_created = True
+                        
                 except Ticket.DoesNotExist:
                     pass
                 except Exception:
                     pass
             
+            detail_message = "Não foi possível classificar o ticket. Verifique se há categorias cadastradas."
+            if suggestion_created:
+                detail_message += " Uma sugestão de categoria foi criada e está aguardando revisão no admin."
+            
             return Response(
-                {"detail": "Não foi possível classificar o ticket. Verifique se há categorias cadastradas."},
+                {"detail": detail_message},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+# =========================================================
+# 7. SUGESTÕES DE CATEGORIAS
+# =========================================================
+
+class CategorySuggestionListView(generics.ListAPIView):
+    """
+    Lista sugestões de categorias geradas pela IA.
+    
+    Endpoint: GET /api/category-suggestions/
+    Requer autenticação por token.
+    Retorna sugestões pendentes para revisão manual.
+    """
+    queryset = CategorySuggestion.objects.filter(status='pending').order_by('-created_at')
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = CategorySuggestion.objects.all().order_by('-created_at')
+        status_filter = self.request.query_params.get('status', None)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        return queryset
+    
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        data = []
+        for suggestion in queryset:
+            data.append({
+                'id': suggestion.id,
+                'suggested_path': suggestion.suggested_path,
+                'ticket_id': suggestion.ticket.id,
+                'ticket_title': suggestion.ticket_title,
+                'ticket_content': suggestion.ticket_content[:500] if suggestion.ticket_content else '',
+                'status': suggestion.status,
+                'created_at': suggestion.created_at,
+                'reviewed_at': suggestion.reviewed_at,
+                'reviewed_by': suggestion.reviewed_by,
+                'notes': suggestion.notes
+            })
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class CategorySuggestionApproveView(APIView):
+    """
+    Aprova uma sugestão de categoria.
+    
+    Endpoint: POST /api/category-suggestions/<id>/approve/
+    Requer autenticação por token.
+    Marca a sugestão como aprovada para que possa ser criada no GLPI.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk):
+        try:
+            suggestion = CategorySuggestion.objects.get(pk=pk)
+        except CategorySuggestion.DoesNotExist:
+            return Response({"detail": "Sugestão não encontrada"}, status=status.HTTP_404_NOT_FOUND)
+        
+        if suggestion.status != 'pending':
+            return Response(
+                {"detail": f"Sugestão já foi {suggestion.get_status_display().lower()}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        suggestion.status = 'approved'
+        suggestion.reviewed_at = timezone.now()
+        suggestion.reviewed_by = request.user.username if request.user.is_authenticated else 'api'
+        suggestion.notes = request.data.get('notes', '')
+        suggestion.save()
+        
+        return Response({
+            "detail": "Sugestão aprovada",
+            "suggestion": {
+                "id": suggestion.id,
+                "suggested_path": suggestion.suggested_path,
+                "status": suggestion.status
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class CategorySuggestionRejectView(APIView):
+    """
+    Rejeita uma sugestão de categoria.
+    
+    Endpoint: POST /api/category-suggestions/<id>/reject/
+    Requer autenticação por token.
+    Marca a sugestão como rejeitada.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk):
+        try:
+            suggestion = CategorySuggestion.objects.get(pk=pk)
+        except CategorySuggestion.DoesNotExist:
+            return Response({"detail": "Sugestão não encontrada"}, status=status.HTTP_404_NOT_FOUND)
+        
+        if suggestion.status != 'pending':
+            return Response(
+                {"detail": f"Sugestão já foi {suggestion.get_status_display().lower()}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        suggestion.status = 'rejected'
+        suggestion.reviewed_at = timezone.now()
+        suggestion.reviewed_by = request.user.username if request.user.is_authenticated else 'api'
+        suggestion.notes = request.data.get('notes', '')
+        suggestion.save()
+        
+        return Response({
+            "detail": "Sugestão rejeitada",
+            "suggestion": {
+                "id": suggestion.id,
+                "suggested_path": suggestion.suggested_path,
+                "status": suggestion.status
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class CategorySuggestionPreviewView(APIView):
+    """
+    Gera uma prévia de sugestão de categoria sem salvar.
+    
+    Endpoint: POST /api/category-suggestions/preview/
+    Requer autenticação por token.
+    
+    Útil para testar e validar sugestões antes de criar categorias no GLPI.
+    Primeiro tenta encontrar uma categoria existente no banco. Se não encontrar,
+    gera uma nova sugestão hierárquica usando IA.
+    
+    Recebe título e conteúdo e retorna a categoria encontrada ou sugestão gerada.
+    
+    Payload esperado:
+    {
+        "title": "Título do ticket",
+        "content": "Conteúdo/descrição do ticket"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        title = request.data.get('title', '').strip()
+        content = request.data.get('content', '').strip()
+        
+        if not title:
+            return Response(
+                {"detail": "Campo 'title' é obrigatório"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from .services import classify_ticket_with_gemini, generate_category_suggestion
+        
+        # Primeiro tenta encontrar uma categoria existente
+        result = classify_ticket_with_gemini(title, content)
+        
+        if result:
+            # Encontrou categoria existente
+            return Response({
+                "suggested_path": result.get('suggested_category_name', ''),
+                "suggested_category_id": result.get('suggested_category_id'),
+                "ticket_type": result.get('ticket_type'),
+                "ticket_type_label": result.get('ticket_type_label'),
+                "classification_method": "existing_category",
+                "confidence": result.get('confidence', 'high'),
+                "note": "Categoria existente encontrada. Esta é apenas uma prévia."
+            }, status=status.HTTP_200_OK)
+        
+        # Se não encontrou categoria existente, gera uma nova sugestão
+        suggested_path = generate_category_suggestion(title, content)
+        
+        if not suggested_path:
+            return Response(
+                {"detail": "Não foi possível gerar uma sugestão de categoria para o contexto fornecido."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Determina o tipo de ticket (incidente/requisição) baseado na sugestão
+        from .services import determine_ticket_type
+        path_parts = [part.strip() for part in suggested_path.split('>') if part.strip()]
+        ticket_type, ticket_type_label = determine_ticket_type(path_parts)
+        
+        return Response({
+            "suggested_path": suggested_path,
+            "ticket_type": ticket_type,
+            "ticket_type_label": ticket_type_label,
+            "classification_method": "new_suggestion",
+            "note": "Nova sugestão gerada (categoria não encontrada). Esta é apenas uma prévia."
+        }, status=status.HTTP_200_OK)

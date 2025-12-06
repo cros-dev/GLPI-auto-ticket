@@ -8,6 +8,7 @@ Define todas as rotas da API organizadas por funcionalidade:
 4. Download de anexos
 5. Configuração de GLPI ID
 6. Classificação de tickets
+7. Sugestões de categorias (listagem, prévia, aprovação, rejeição)
 """
 from django.urls import path
 from .views import (
@@ -18,7 +19,11 @@ from .views import (
     TicketDetailView,
     AttachmentDownloadView,
     SetGlpiIdView,
-    TicketClassificationView
+    TicketClassificationView,
+    CategorySuggestionListView,
+    CategorySuggestionApproveView,
+    CategorySuggestionRejectView,
+    CategorySuggestionPreviewView
 )
 
 urlpatterns = [
@@ -53,4 +58,12 @@ urlpatterns = [
     # 6. CLASSIFICAÇÃO DE TICKET
     # =========================================================
     path('tickets/classify/', TicketClassificationView.as_view(), name='ticket-classify'),
+
+    # =========================================================
+    # 7. SUGESTÕES DE CATEGORIAS
+    # =========================================================
+    path('category-suggestions/', CategorySuggestionListView.as_view(), name='category-suggestion-list'),
+    path('category-suggestions/preview/', CategorySuggestionPreviewView.as_view(), name='category-suggestion-preview'),
+    path('category-suggestions/<int:pk>/approve/', CategorySuggestionApproveView.as_view(), name='category-suggestion-approve'),
+    path('category-suggestions/<int:pk>/reject/', CategorySuggestionRejectView.as_view(), name='category-suggestion-reject'),
 ]

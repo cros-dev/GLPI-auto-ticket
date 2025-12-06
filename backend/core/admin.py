@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils.html import mark_safe
-from .models import GlpiCategory, Ticket, Attachment
+from django.utils import timezone
+from .models import GlpiCategory, Ticket, Attachment, CategorySuggestion
 from .services import get_category_path
 
 class Level1Filter(admin.SimpleListFilter):
@@ -70,7 +71,7 @@ class TicketAdmin(admin.ModelAdmin):
     Exibe tickets recebidos do GLPI via webhook, com conteúdo limpo (sem HTML)
     e campos organizados em seções.
     """
-    list_display = ('id', 'name', 'category_name', 'classification_method', 'classification_confidence', 'created_at')
+    list_display = ('id', 'name', 'category_name', 'category_suggestion_display', 'classification_method', 'classification_confidence', 'created_at')
     list_filter = ('created_at', 'classification_method', 'classification_confidence')
     search_fields = ('name', 'content_html', 'id') 
     
@@ -78,6 +79,7 @@ class TicketAdmin(admin.ModelAdmin):
         'id',
         'name', 
         'category_name', 
+        'category_suggestion_display',
         'classification_method',
         'classification_confidence',
         'user_recipient_name', 
@@ -95,7 +97,8 @@ class TicketAdmin(admin.ModelAdmin):
                 'id', 
                 'name',                
                 'content_text_clean',
-                'category_name',
+                'category_name', 
+                'category_suggestion_display',
                 'classification_method',
                 'classification_confidence',
                 'user_recipient_name', 
@@ -126,6 +129,33 @@ class TicketAdmin(admin.ModelAdmin):
         return mark_safe(obj.content_html.replace('\n', '<br>'))
 
     content_text_clean.short_description = "Descrição"
+    
+    def category_suggestion_display(self, obj):
+        """
+        Exibe sugestão de categoria pendente para este ticket.
+        
+        Args:
+            obj: Instância de Ticket
+            
+        Returns:
+            str: Caminho sugerido com link para a sugestão ou "-" se não houver
+        """
+        if not obj.id:
+            return "-"
+        
+        suggestion = CategorySuggestion.objects.filter(
+            ticket=obj,
+            status='pending'
+        ).order_by('-created_at').first()
+        
+        if suggestion:
+            url = f"/admin/core/categorysuggestion/{suggestion.id}/change/"
+            return mark_safe(
+                f'<a href="{url}" style="color: #417690; font-weight: bold;">{suggestion.suggested_path}</a>'
+            )
+        return "-"
+    
+    category_suggestion_display.short_description = "Category Suggestion"
 
 @admin.register(Attachment)
 class AttachmentAdmin(admin.ModelAdmin):
@@ -236,3 +266,90 @@ class GlpiCategoryAdmin(admin.ModelAdmin):
         path = get_category_path(obj)
         return path[5] if len(path) > 5 else '-'
     level_6.short_description = 'Nível 6'
+
+
+@admin.register(CategorySuggestion)
+class CategorySuggestionAdmin(admin.ModelAdmin):
+    """
+    Configuração do admin para sugestões de categorias.
+    
+    Exibe sugestões geradas pela IA quando não encontra categoria exata,
+    permitindo revisão e aprovação manual.
+    """
+    list_display = ('id', 'suggested_path', 'ticket_link', 'status', 'created_at', 'reviewed_at')
+    list_filter = ('status', 'created_at', 'reviewed_at')
+    search_fields = ('suggested_path', 'ticket_title', 'ticket__id')
+    readonly_fields = (
+        'ticket',
+        'ticket_title',
+        'ticket_content_display',
+        'suggested_path',
+        'created_at',
+        'updated_at',
+        'reviewed_at',
+        'reviewed_by'
+    )
+    actions = ['approve_suggestions', 'reject_suggestions']
+    
+    fieldsets = (
+        ('Sugestão', {
+            'fields': (
+                'suggested_path',
+                'status',
+                'notes'
+            )
+        }),
+        ('Ticket Relacionado', {
+            'fields': (
+                'ticket',
+                'ticket_title',
+                'ticket_content_display'
+            )
+        }),
+        ('Revisão', {
+            'fields': (
+                'reviewed_at',
+                'reviewed_by'
+            )
+        }),
+        ('Metadados', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def ticket_link(self, obj):
+        """Exibe link para o ticket relacionado."""
+        return mark_safe(f'<a href="/admin/core/ticket/{obj.ticket.id}/change/">Ticket #{obj.ticket.id}</a>')
+    ticket_link.short_description = 'Ticket'
+    
+    def ticket_content_display(self, obj):
+        """Exibe conteúdo do ticket formatado."""
+        if not obj.ticket_content:
+            return "-"
+        return mark_safe(obj.ticket_content.replace('\n', '<br>'))
+    ticket_content_display.short_description = 'Conteúdo do Ticket'
+    
+    def approve_suggestions(self, request, queryset):
+        """Aprova sugestões selecionadas."""
+        count = 0
+        for suggestion in queryset.filter(status='pending'):
+            suggestion.status = 'approved'
+            suggestion.reviewed_at = timezone.now()
+            suggestion.reviewed_by = request.user.username
+            suggestion.save()
+            count += 1
+        self.message_user(request, f'{count} sugestão(ões) aprovada(s).')
+    approve_suggestions.short_description = 'Aprovar sugestões selecionadas'
+    
+    def reject_suggestions(self, request, queryset):
+        """Rejeita sugestões selecionadas."""
+        count = 0
+        for suggestion in queryset.filter(status='pending'):
+            suggestion.status = 'rejected'
+            suggestion.reviewed_at = timezone.now()
+            suggestion.reviewed_by = request.user.username
+            suggestion.save()
+            count += 1
+        self.message_user(request, f'{count} sugestão(ões) rejeitada(s).')
+    reject_suggestions.short_description = 'Rejeitar sugestões selecionadas'

@@ -113,11 +113,11 @@ class GlpiWebhookSerializer(serializers.Serializer):
     name = serializers.CharField()
     content = serializers.CharField()
     category_id = serializers.IntegerField(required=False, allow_null=True)
-    category_name = serializers.CharField(required=False, allow_blank=True)
-    entity_id = serializers.IntegerField()
-    entity_name = serializers.CharField()
-    team_assigned_id = serializers.IntegerField()
-    team_assigned_name = serializers.CharField()
+    category_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    entity_id = serializers.IntegerField(required=False, allow_null=True)
+    entity_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    team_assigned_id = serializers.IntegerField(required=False, allow_null=True)
+    team_assigned_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
 
 # =========================================================
