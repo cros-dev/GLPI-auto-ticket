@@ -66,11 +66,11 @@ class GlpiCategorySyncView(APIView):
 
         try:
             categories = self._parse_csv(uploaded_file)
-        if not categories:
-            return Response(
+            if not categories:
+                return Response(
                     {"detail": "Nenhuma categoria encontrada no CSV."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             result = self._process_categories(categories)
             return Response(result, status=status.HTTP_200_OK)
         except ValueError as e:
@@ -210,7 +210,7 @@ class GlpiCategorySyncView(APIView):
             cache_by_path[entry["full_path"]] = obj
             if created:
                 created_count += 1
-                else:
+            else:
                 updated_count += 1
 
         return {
