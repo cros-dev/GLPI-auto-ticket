@@ -5,11 +5,51 @@ Este módulo contém funções para classificação automática de tickets usand
 Google Gemini AI. 
 """
 import logging
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 from django.conf import settings
 from .models import GlpiCategory, CategorySuggestion, Ticket 
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_gemini_error(exception: Exception) -> Tuple[str, str]:
+    """
+    Analisa exceções da API do Gemini e retorna informações específicas sobre o erro.
+    
+    Args:
+        exception: Exceção capturada
+        
+    Returns:
+        Tuple[str, str]: (tipo_erro, mensagem_amigavel)
+        tipos possíveis: 'api_key_invalid', 'api_key_expired', 'quota_exceeded', 'unknown'
+    """
+    error_str = str(exception)
+    error_lower = error_str.lower()
+    
+    if 'api key expired' in error_lower or 'api_key_expired' in error_lower or 'expired' in error_lower:
+        if 'api key' in error_lower or 'api_key' in error_lower:
+            return 'api_key_expired', 'A chave da API do Gemini está expirada. Por favor, renove a chave de API.'
+    
+    if 'api key' in error_lower or 'api_key' in error_lower:
+        if 'invalid' in error_lower or 'api_key_invalid' in error_lower:
+            return 'api_key_invalid', 'A chave da API do Gemini é inválida. Verifique a configuração da chave.'
+    
+    if 'quota' in error_lower or 'rate limit' in error_lower:
+        return 'quota_exceeded', 'Limite de quota da API do Gemini foi excedido. Tente novamente mais tarde.'
+    
+    if 'authentication' in error_lower or 'unauthorized' in error_lower:
+        return 'api_key_invalid', 'Erro de autenticação com a API do Gemini. Verifique a chave de API.'
+    
+    if 'permission' in error_lower or 'forbidden' in error_lower:
+        return 'api_key_invalid', 'A chave da API do Gemini não tem permissões suficientes.'
+    
+    if 'invalid_argument' in error_lower or 'invalid argument' in error_lower:
+        if 'api key' in error_lower or 'api_key' in error_lower:
+            if 'expired' in error_lower:
+                return 'api_key_expired', 'A chave da API do Gemini está expirada. Por favor, renove a chave de API.'
+            return 'api_key_invalid', 'A chave da API do Gemini é inválida. Verifique a configuração da chave.'
+    
+    return 'unknown', f'Erro ao comunicar com a API do Gemini: {error_str}'
 
 def get_category_path(category):
     """
@@ -53,7 +93,6 @@ def determine_ticket_type(path_parts):
             return 1, 'incidente'
         if 'requisição' in name or 'requisicao' in name:
             return 2, 'requisição'
-        # "Administrativo" geralmente indica requisição
         if 'administrativo' in name:
             return 2, 'requisição'
     return None, None
@@ -178,19 +217,13 @@ ID: [número do ID]"""
         
         category_path = get_category_path(category)
         
-        # Lista de categorias genéricas que não devem ser aceitas sem subcategoria específica
         generic_categories = ['periféricos', 'outros', 'outros acessos', 'outros equipamentos', 
                              'solicitação geral', 'problema geral', 'equipamentos', 'hardware',
                              'software', 'sistemas', 'acesso']
         
         last_level = category_path[-1].lower() if category_path else ''
         
-        # Verifica se a categoria é muito genérica:
-        # - Menos de 4 níveis OU
-        # - Último nível é uma categoria genérica (sem subcategoria específica)
         if len(category_path) < 4 or last_level in generic_categories:
-            # Categorias genéricas como "TI > Requisição > Equipamentos > Periféricos" 
-            # são consideradas insuficientes - vamos gerar sugestão mais específica
             logger.info(f"Categoria muito genérica encontrada ({len(category_path)} níveis, último: '{last_level}'): {' > '.join(category_path)}. Gerando sugestão mais específica.")
             return None
         
@@ -207,10 +240,11 @@ ID: [número do ID]"""
         
     except ImportError:
         logger.warning("Biblioteca google-genai não instalada, classificação será ignorada")
-        return None
+        return {'error': 'library_not_installed', 'message': 'Biblioteca google-genai não está instalada.'}
     except Exception as e:
-        logger.warning(f"Erro ao classificar com Gemini AI: {str(e)}, classificação será ignorada")
-        return None
+        error_type, error_message = _parse_gemini_error(e)
+        logger.warning(f"Erro ao classificar com Gemini AI: {error_type} - {str(e)}")
+        return {'error': error_type, 'message': error_message}
 
 
 def generate_category_suggestion(
@@ -279,7 +313,6 @@ SUGESTÃO: [caminho completo]"""
                 break
         
         if not suggested_path:
-            # Tenta pegar a primeira linha que não seja vazia
             for line in lines:
                 line = line.strip()
                 if line and not line.lower().startswith('sugestão') and not line.lower().startswith('sugestao'):
@@ -291,9 +324,13 @@ SUGESTÃO: [caminho completo]"""
         
         return None
         
+    except ImportError:
+        logger.warning("Biblioteca google-genai não instalada, geração de sugestão será ignorada")
+        return {'error': 'library_not_installed', 'message': 'Biblioteca google-genai não está instalada.'}
     except Exception as e:
-        logger.warning(f"Erro ao gerar sugestão de categoria: {str(e)}")
-        return None
+        error_type, error_message = _parse_gemini_error(e)
+        logger.warning(f"Erro ao gerar sugestão de categoria: {error_type} - {str(e)}")
+        return {'error': error_type, 'message': error_message}
 
 
 def save_category_suggestion(
@@ -317,26 +354,23 @@ def save_category_suggestion(
     try:
         ticket = Ticket.objects.get(id=ticket_id)
         
-        # Verifica se já existe sugestão pendente para este ticket
         existing = CategorySuggestion.objects.filter(
             ticket=ticket,
             status='pending'
         ).first()
         
         if existing:
-            # Atualiza a sugestão existente
             existing.suggested_path = suggested_path
             existing.ticket_title = title
-            existing.ticket_content = content[:5000]  # Limita tamanho
+            existing.ticket_content = content[:5000]
             existing.save()
             return existing
         
-        # Cria nova sugestão
         suggestion = CategorySuggestion.objects.create(
             ticket=ticket,
             suggested_path=suggested_path,
             ticket_title=title,
-            ticket_content=content[:5000],  # Limita tamanho
+            ticket_content=content[:5000],
             status='pending'
         )
         return suggestion
@@ -373,10 +407,16 @@ def classify_ticket(
     """
     result = classify_ticket_with_gemini(title, content)
     
-    # Se não encontrou categoria exata e temos ticket_id, tenta gerar sugestão
+    if isinstance(result, dict) and 'error' in result:
+        return result
+    
     if not result and ticket_id:
         suggested_path = generate_category_suggestion(title, content, ticket_id)
-        if suggested_path:
+        
+        if isinstance(suggested_path, dict) and 'error' in suggested_path:
+            return suggested_path
+        
+        if suggested_path and isinstance(suggested_path, str):
             save_category_suggestion(ticket_id, suggested_path, title, content)
             logger.info(f"Sugestão de categoria criada para ticket {ticket_id}: {suggested_path}")
     

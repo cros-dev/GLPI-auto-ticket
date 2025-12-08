@@ -422,6 +422,12 @@ class TicketClassificationView(APIView):
             ticket_id=glpi_ticket_id
         )
         
+        if isinstance(result, dict) and 'error' in result:
+            return Response(
+                {"detail": result.get('message', 'Erro ao classificar ticket com Gemini AI.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         if result:
             glpi_ticket_id = data.get("glpi_ticket_id")
             
@@ -631,7 +637,13 @@ class CategorySuggestionPreviewView(APIView):
         
         result = classify_ticket_with_gemini(title, content)
         
-        if result:
+        if result and isinstance(result, dict) and 'error' in result:
+            return Response(
+                {"detail": result.get('message', 'Erro ao classificar ticket com Gemini AI.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if result and isinstance(result, dict) and 'suggested_category_name' in result:
             return Response({
                 "suggested_path": result.get('suggested_category_name', ''),
                 "suggested_category_id": result.get('suggested_category_id'),
@@ -643,6 +655,12 @@ class CategorySuggestionPreviewView(APIView):
             }, status=status.HTTP_200_OK)
         
         suggested_path = generate_category_suggestion(title, content)
+        
+        if isinstance(suggested_path, dict) and 'error' in suggested_path:
+            return Response(
+                {"detail": suggested_path.get('message', 'Erro ao gerar sugestão de categoria com Gemini AI.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         if not suggested_path:
             return Response(
