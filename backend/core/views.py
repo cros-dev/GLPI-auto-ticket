@@ -16,13 +16,14 @@ from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse, Http404
 from django.utils import timezone
 
-from .models import GlpiCategory, Ticket, Attachment, CategorySuggestion
+from .models import GlpiCategory, Ticket, Attachment, CategorySuggestion, SatisfactionSurvey
 from .serializers import (
     GlpiCategorySerializer, 
     TicketSerializer, 
     GlpiWebhookSerializer,
     TicketClassificationSerializer,
-    TicketClassificationResponseSerializer
+    TicketClassificationResponseSerializer,
+    SatisfactionSurveySerializer
 )
 from .utils import clean_html_content
 from .services import classify_ticket 
@@ -253,9 +254,14 @@ class GlpiWebhookView(APIView):
     Endpoint: POST /api/glpi/webhook/ticket/
     Fluxo: GLPI → n8n → Django
     
+    Requer autenticação por token no header:
+    Authorization: Token <token_aqui>
+    
     Valida o payload, limpa o HTML do conteúdo e salva/atualiza o ticket
     no banco de dados local.
     """
+    permission_classes = [IsAuthenticated]
+    
     def post(self, request):
         serializer = GlpiWebhookSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -679,3 +685,68 @@ class CategorySuggestionPreviewView(APIView):
             "classification_method": "new_suggestion",
             "note": "Nova sugestão gerada (categoria não encontrada). Esta é apenas uma prévia."
         }, status=status.HTTP_200_OK)
+
+
+# =========================================================
+# 8. PESQUISA DE SATISFAÇÃO
+# =========================================================
+
+class SatisfactionSurveySubmitView(APIView):
+    """
+    Recebe e salva resposta da pesquisa de satisfação do usuário.
+    
+    Endpoint: POST /api/satisfaction-survey/submit/
+    Chamado pelo Zoho Cliq Bot quando o usuário responde à pesquisa.
+    
+    Requer autenticação por token no header:
+    Authorization: Token <token_aqui>
+    
+    Recebe ticket_id, response (yes/no) e comment opcional.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = SatisfactionSurveySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        
+        ticket_id = data.get('ticket_id')
+        
+        try:
+            ticket = Ticket.objects.get(id=ticket_id)
+        except Ticket.DoesNotExist:
+            return Response(
+                {"detail": f"Ticket {ticket_id} não encontrado."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        existing_survey = SatisfactionSurvey.objects.filter(ticket=ticket).first()
+        
+        if existing_survey:
+            existing_survey.response = data.get('response')
+            existing_survey.comment = data.get('comment', '')
+            existing_survey.save()
+            survey = existing_survey
+            created = False
+            message = "Pesquisa de satisfação atualizada com sucesso."
+            status_code = status.HTTP_200_OK
+        else:
+            survey = SatisfactionSurvey.objects.create(
+                ticket=ticket,
+                response=data.get('response'),
+                comment=data.get('comment', '')
+            )
+            created = True
+            message = "Pesquisa de satisfação registrada com sucesso."
+            status_code = status.HTTP_201_CREATED
+        
+        return Response(
+            {
+                "detail": message,
+                "survey_id": survey.id,
+                "ticket_id": ticket_id,
+                "response": survey.get_response_display(),
+                "created": created
+            },
+            status=status_code
+        )

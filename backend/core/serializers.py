@@ -7,7 +7,7 @@ Este módulo contém todos os serializers usados para:
 - Transformação entre modelos Django e JSON
 """
 from rest_framework import serializers
-from .models import Ticket, Attachment, GlpiCategory
+from .models import Ticket, Attachment, GlpiCategory, SatisfactionSurvey
 
 
 # =========================================================
@@ -162,4 +162,30 @@ class TicketClassificationResponseSerializer(serializers.Serializer):
         allow_null=True,
         required=False,
         help_text="Nome do tipo (incidente/requisição)"
+    )
+
+
+# =========================================================
+# 6. PESQUISA DE SATISFAÇÃO
+# =========================================================
+
+class SatisfactionSurveySerializer(serializers.Serializer):
+    """
+    Serializer para receber dados da pesquisa de satisfação.
+    
+    Valida os dados recebidos do Zoho Cliq Bot quando o usuário
+    responde à pesquisa de satisfação sobre o atendimento.
+    """
+    ticket_id = serializers.IntegerField(
+        help_text="ID do ticket relacionado à pesquisa"
+    )
+    response = serializers.ChoiceField(
+        choices=['yes', 'no'],
+        help_text="Resposta do usuário: 'yes' (sim) ou 'no' (não)"
+    )
+    comment = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+        help_text="Comentário opcional do usuário sobre o atendimento"
     )

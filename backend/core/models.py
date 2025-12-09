@@ -6,6 +6,7 @@ Este módulo contém os modelos principais:
 - Ticket: Tickets recebidos do GLPI via webhook
 - Attachment: Anexos vinculados aos tickets
 - CategorySuggestion: Sugestões de categorias geradas pela IA para revisão manual
+- SatisfactionSurvey: Pesquisas de satisfação respondidas pelos usuários
 """
 from django.db import models
 
@@ -199,3 +200,48 @@ class CategorySuggestion(models.Model):
 
     def __str__(self):
         return f"{self.suggested_path} (Ticket #{self.ticket.id})"
+
+
+class SatisfactionSurvey(models.Model):
+    """
+    Pesquisa de satisfação respondida pelo usuário sobre o atendimento recebido.
+    
+    Armazena respostas de pesquisas de satisfação enviadas via Zoho Cliq Bot
+    após o fechamento/resolução de um ticket.
+    """
+    
+    RESPONSE_CHOICES = [
+        ('yes', 'Sim'),
+        ('no', 'Não'),
+    ]
+    
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name='satisfaction_surveys',
+        help_text="Ticket relacionado à pesquisa de satisfação"
+    )
+    
+    response = models.CharField(
+        max_length=10,
+        choices=RESPONSE_CHOICES,
+        help_text="Resposta do usuário: sim ou não"
+    )
+    
+    comment = models.TextField(
+        blank=True,
+        help_text="Comentário opcional do usuário sobre o atendimento"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Pesquisa de Satisfação'
+        verbose_name_plural = 'Pesquisas de Satisfação'
+        constraints = [
+            models.UniqueConstraint(fields=['ticket'], name='unique_survey_per_ticket')
+        ]
+    
+    def __str__(self):
+        return f"Pesquisa Ticket #{self.ticket.id} - {self.get_response_display()} ({self.created_at.strftime('%d/%m/%Y %H:%M')})"

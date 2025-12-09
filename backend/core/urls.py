@@ -23,7 +23,8 @@ from .views import (
     CategorySuggestionListView,
     CategorySuggestionApproveView,
     CategorySuggestionRejectView,
-    CategorySuggestionPreviewView
+    CategorySuggestionPreviewView,
+    SatisfactionSurveySubmitView
 )
 
 urlpatterns = [
@@ -66,4 +67,9 @@ urlpatterns = [
     path('category-suggestions/preview/', CategorySuggestionPreviewView.as_view(), name='category-suggestion-preview'),
     path('category-suggestions/<int:pk>/approve/', CategorySuggestionApproveView.as_view(), name='category-suggestion-approve'),
     path('category-suggestions/<int:pk>/reject/', CategorySuggestionRejectView.as_view(), name='category-suggestion-reject'),
+    
+    # =========================================================
+    # 8. PESQUISA DE SATISFAÇÃO
+    # =========================================================
+    path('satisfaction-survey/submit/', SatisfactionSurveySubmitView.as_view(), name='satisfaction-survey-submit'),
 ]
