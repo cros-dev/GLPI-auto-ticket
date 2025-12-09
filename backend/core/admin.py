@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import mark_safe
 from django.utils import timezone
-from .models import GlpiCategory, Ticket, Attachment, CategorySuggestion
+from .models import GlpiCategory, Ticket, Attachment, CategorySuggestion, SatisfactionSurvey
 from .services import get_category_path
 
 class Level1Filter(admin.SimpleListFilter):
@@ -71,7 +71,7 @@ class TicketAdmin(admin.ModelAdmin):
     Exibe tickets recebidos do GLPI via webhook, com conteúdo limpo (sem HTML)
     e campos organizados em seções.
     """
-    list_display = ('id', 'name', 'category_name', 'category_suggestion_display', 'classification_method', 'classification_confidence', 'created_at')
+    list_display = ('id', 'name', 'category_name', 'category_suggestion_display', 'satisfaction_survey_display', 'classification_method', 'classification_confidence', 'created_at')
     list_filter = ('created_at', 'classification_method', 'classification_confidence')
     search_fields = ('name', 'content_html', 'id') 
     
@@ -80,6 +80,7 @@ class TicketAdmin(admin.ModelAdmin):
         'name', 
         'category_name', 
         'category_suggestion_display',
+        'satisfaction_survey_display',
         'classification_method',
         'classification_confidence',
         'user_recipient_name', 
@@ -99,6 +100,7 @@ class TicketAdmin(admin.ModelAdmin):
                 'content_text_clean',
                 'category_name', 
                 'category_suggestion_display',
+                'satisfaction_survey_display',
                 'classification_method',
                 'classification_confidence',
                 'user_recipient_name', 
@@ -156,6 +158,30 @@ class TicketAdmin(admin.ModelAdmin):
         return "-"
     
     category_suggestion_display.short_description = "Category Suggestion"
+    
+    def satisfaction_survey_display(self, obj):
+        """
+        Exibe pesquisa de satisfação para este ticket.
+        
+        Args:
+            obj: Instância de Ticket
+            
+        Returns:
+            str: Link para a pesquisa ou "-" se não houver
+        """
+        if not obj.id:
+            return "-"
+        
+        survey = SatisfactionSurvey.objects.filter(ticket=obj).first()
+        
+        if survey:
+            url = f"/admin/core/satisfactionsurvey/{survey.id}/change/"
+            return mark_safe(
+                f'<a href="{url}" style="color: #417690; font-weight: bold;">Ver Pesquisa</a>'
+            )
+        return "-"
+    
+    satisfaction_survey_display.short_description = "Pesquisa de Satisfação"
 
 @admin.register(Attachment)
 class AttachmentAdmin(admin.ModelAdmin):
@@ -353,3 +379,55 @@ class CategorySuggestionAdmin(admin.ModelAdmin):
             count += 1
         self.message_user(request, f'{count} sugestão(ões) rejeitada(s).')
     reject_suggestions.short_description = 'Rejeitar sugestões selecionadas'
+
+
+@admin.register(SatisfactionSurvey)
+class SatisfactionSurveyAdmin(admin.ModelAdmin):
+    """
+    Configuração do admin para pesquisas de satisfação.
+    
+    Exibe pesquisas respondidas pelos usuários sobre o atendimento recebido.
+    """
+    list_display = ('id', 'ticket_link', 'response_display', 'comment_preview', 'created_at')
+    list_filter = ('response', 'created_at')
+    search_fields = ('ticket__id', 'comment')
+    readonly_fields = ('ticket', 'response', 'comment_display', 'created_at')
+    
+    fieldsets = (
+        ('Pesquisa', {
+            'fields': (
+                'ticket',
+                'response',
+                'comment_display'
+            )
+        }),
+        ('Metadados', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def ticket_link(self, obj):
+        """Exibe link para o ticket relacionado."""
+        return mark_safe(f'<a href="/admin/core/ticket/{obj.ticket.id}/change/">{obj.ticket.id}</a>')
+    ticket_link.short_description = 'Ticket'
+    
+    def response_display(self, obj):
+        """Exibe resposta formatada."""
+        return obj.get_response_display()
+    response_display.short_description = 'Resposta'
+    
+    def comment_preview(self, obj):
+        """Exibe preview do comentário (primeiros 50 caracteres)."""
+        if obj.comment:
+            preview = obj.comment[:50] + '...' if len(obj.comment) > 50 else obj.comment
+            return preview
+        return "-"
+    comment_preview.short_description = 'Comentário'
+    
+    def comment_display(self, obj):
+        """Exibe comentário completo formatado."""
+        if not obj.comment:
+            return "-"
+        return mark_safe(obj.comment.replace('\n', '<br>'))
+    comment_display.short_description = 'Comentário Completo'
