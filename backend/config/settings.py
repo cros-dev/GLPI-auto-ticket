@@ -138,6 +138,9 @@ GLPI_API_URL = os.getenv('GLPI_API_URL')
 GLPI_API_TOKEN = os.getenv('GLPI_API_TOKEN')
 GLPI_BASE_URL = os.environ.get('GLPI_BASE_URL', 'http://localhost')
 
+# Webhook n8n para atualizar pesquisa de satisfação no GLPI
+N8N_WEBHOOK_URL = os.getenv('N8N_WEBHOOK_URL')
+
 # Chave para provedor de IA (Google Gemini)
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 

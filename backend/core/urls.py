@@ -23,8 +23,7 @@ from .views import (
     CategorySuggestionListView,
     CategorySuggestionApproveView,
     CategorySuggestionRejectView,
-    CategorySuggestionPreviewView,
-    SatisfactionSurveySubmitView
+    CategorySuggestionPreviewView
 )
 
 urlpatterns = [
@@ -71,5 +70,5 @@ urlpatterns = [
     # =========================================================
     # 8. PESQUISA DE SATISFAÇÃO
     # =========================================================
-    path('satisfaction-survey/submit/', SatisfactionSurveySubmitView.as_view(), name='satisfaction-survey-submit'),
+    # Endpoints públicos estão em config/urls.py
 ]

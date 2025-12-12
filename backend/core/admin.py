@@ -130,7 +130,7 @@ class TicketAdmin(admin.ModelAdmin):
             return "-"
         return mark_safe(obj.content_html.replace('\n', '<br>'))
 
-    content_text_clean.short_description = "Descrição"
+    content_text_clean.short_description = 'Descrição'
     
     def category_suggestion_display(self, obj):
         """
@@ -157,7 +157,7 @@ class TicketAdmin(admin.ModelAdmin):
             )
         return "-"
     
-    category_suggestion_display.short_description = "Category Suggestion"
+    category_suggestion_display.short_description = 'Category Suggestion'
     
     def satisfaction_survey_display(self, obj):
         """
@@ -181,7 +181,7 @@ class TicketAdmin(admin.ModelAdmin):
             )
         return "-"
     
-    satisfaction_survey_display.short_description = "Pesquisa de Satisfação"
+    satisfaction_survey_display.short_description = 'Pesquisa de Satisfação'
 
 @admin.register(Attachment)
 class AttachmentAdmin(admin.ModelAdmin):
@@ -280,6 +280,12 @@ class GlpiCategoryAdmin(admin.ModelAdmin):
     def level_5(self, obj):
         """
         Retorna o nome da categoria do nível 5 da hierarquia.
+        
+        Args:
+            obj: Instância de GlpiCategory
+            
+        Returns:
+            str: Nome da categoria do nível 5 ou '-' se não houver
         """
         path = get_category_path(obj)
         return path[4] if len(path) > 4 else '-'
@@ -288,11 +294,16 @@ class GlpiCategoryAdmin(admin.ModelAdmin):
     def level_6(self, obj):
         """
         Retorna o nome da categoria do nível 6 da hierarquia.
+        
+        Args:
+            obj: Instância de GlpiCategory
+            
+        Returns:
+            str: Nome da categoria do nível 6 ou '-' se não houver
         """
         path = get_category_path(obj)
         return path[5] if len(path) > 5 else '-'
     level_6.short_description = 'Nível 6'
-
 
 @admin.register(CategorySuggestion)
 class CategorySuggestionAdmin(admin.ModelAdmin):
@@ -345,19 +356,41 @@ class CategorySuggestionAdmin(admin.ModelAdmin):
     )
     
     def ticket_link(self, obj):
-        """Exibe link para o ticket relacionado."""
+        """
+        Exibe link para o ticket relacionado.
+        
+        Args:
+            obj: Instância de CategorySuggestion
+            
+        Returns:
+            str: Link HTML para o ticket ou '-' se não houver
+        """
         return mark_safe(f'<a href="/admin/core/ticket/{obj.ticket.id}/change/">Ticket #{obj.ticket.id}</a>')
     ticket_link.short_description = 'Ticket'
     
     def ticket_content_display(self, obj):
-        """Exibe conteúdo do ticket formatado."""
+        """
+        Exibe conteúdo do ticket formatado.
+        
+        Args:
+            obj: Instância de CategorySuggestion
+            
+        Returns:
+            str: Conteúdo formatado em HTML ou '-' se vazio
+        """
         if not obj.ticket_content:
             return "-"
         return mark_safe(obj.ticket_content.replace('\n', '<br>'))
     ticket_content_display.short_description = 'Conteúdo do Ticket'
     
     def approve_suggestions(self, request, queryset):
-        """Aprova sugestões selecionadas."""
+        """
+        Aprova sugestões selecionadas.
+        
+        Args:
+            request: Requisição HTTP
+            queryset: QuerySet de sugestões selecionadas
+        """
         count = 0
         for suggestion in queryset.filter(status='pending'):
             suggestion.status = 'approved'
@@ -369,7 +402,13 @@ class CategorySuggestionAdmin(admin.ModelAdmin):
     approve_suggestions.short_description = 'Aprovar sugestões selecionadas'
     
     def reject_suggestions(self, request, queryset):
-        """Rejeita sugestões selecionadas."""
+        """
+        Rejeita sugestões selecionadas.
+        
+        Args:
+            request: Requisição HTTP
+            queryset: QuerySet de sugestões selecionadas
+        """
         count = 0
         for suggestion in queryset.filter(status='pending'):
             suggestion.status = 'rejected'
@@ -380,7 +419,6 @@ class CategorySuggestionAdmin(admin.ModelAdmin):
         self.message_user(request, f'{count} sugestão(ões) rejeitada(s).')
     reject_suggestions.short_description = 'Rejeitar sugestões selecionadas'
 
-
 @admin.register(SatisfactionSurvey)
 class SatisfactionSurveyAdmin(admin.ModelAdmin):
     """
@@ -388,18 +426,24 @@ class SatisfactionSurveyAdmin(admin.ModelAdmin):
     
     Exibe pesquisas respondidas pelos usuários sobre o atendimento recebido.
     """
-    list_display = ('id', 'ticket_link', 'response_display', 'comment_preview', 'created_at')
-    list_filter = ('response', 'created_at')
+    list_display = ('id', 'ticket_link', 'rating_display', 'comment_preview', 'token_status', 'created_at')
+    list_filter = ('rating', 'created_at')
     search_fields = ('ticket__id', 'comment')
-    readonly_fields = ('ticket', 'response', 'comment_display', 'created_at')
+    readonly_fields = ('ticket', 'rating', 'comment_display', 'token_display', 'token_expires_at', 'created_at')
+    actions = ['reset_token_action']
     
     fieldsets = (
         ('Pesquisa', {
             'fields': (
                 'ticket',
-                'response',
+                'rating',
                 'comment_display'
             )
+        }),
+        ('Segurança (Token)', {
+            'fields': ('token_display', 'token_expires_at'),
+            'classes': ('collapse',),
+            'description': 'Token de segurança para validar a pesquisa. Use a ação "Resetar token" para permitir nova resposta.'
         }),
         ('Metadados', {
             'fields': ('created_at',),
@@ -408,17 +452,41 @@ class SatisfactionSurveyAdmin(admin.ModelAdmin):
     )
     
     def ticket_link(self, obj):
-        """Exibe link para o ticket relacionado."""
+        """
+        Exibe link para o ticket relacionado.
+        
+        Args:
+            obj: Instância de SatisfactionSurvey
+            
+        Returns:
+            str: Link HTML para o ticket
+        """
         return mark_safe(f'<a href="/admin/core/ticket/{obj.ticket.id}/change/">{obj.ticket.id}</a>')
     ticket_link.short_description = 'Ticket'
     
-    def response_display(self, obj):
-        """Exibe resposta formatada."""
-        return obj.get_response_display()
-    response_display.short_description = 'Resposta'
+    def rating_display(self, obj):
+        """
+        Exibe nota formatada.
+        
+        Args:
+            obj: Instância de SatisfactionSurvey
+            
+        Returns:
+            str: Nota formatada como "X/5 - [Label]"
+        """
+        return f"{obj.rating}/5 - {obj.get_rating_display()}"
+    rating_display.short_description = 'Nota'
     
     def comment_preview(self, obj):
-        """Exibe preview do comentário (primeiros 50 caracteres)."""
+        """
+        Exibe preview do comentário (primeiros 50 caracteres).
+        
+        Args:
+            obj: Instância de SatisfactionSurvey
+            
+        Returns:
+            str: Preview do comentário ou '-' se não houver
+        """
         if obj.comment:
             preview = obj.comment[:50] + '...' if len(obj.comment) > 50 else obj.comment
             return preview
@@ -426,8 +494,72 @@ class SatisfactionSurveyAdmin(admin.ModelAdmin):
     comment_preview.short_description = 'Comentário'
     
     def comment_display(self, obj):
-        """Exibe comentário completo formatado."""
+        """
+        Exibe comentário completo formatado.
+        
+        Args:
+            obj: Instância de SatisfactionSurvey
+            
+        Returns:
+            str: Comentário formatado em HTML ou '-' se vazio
+        """
         if not obj.comment:
             return "-"
         return mark_safe(obj.comment.replace('\n', '<br>'))
     comment_display.short_description = 'Comentário Completo'
+    
+    def token_display(self, obj):
+        """
+        Exibe token de segurança (primeiros e últimos caracteres).
+        
+        Args:
+            obj: Instância de SatisfactionSurvey
+            
+        Returns:
+            str: Token formatado ou 'Não gerado' se não houver
+        """
+        if not obj.token:
+            return "Não gerado"
+        # Mostra primeiros 8 e últimos 8 caracteres
+        return f"{obj.token[:8]}...{obj.token[-8:]}"
+    token_display.short_description = 'Token'
+    
+    def token_status(self, obj):
+        """
+        Exibe status do token (ativo/expirado/sem token).
+        
+        Args:
+            obj: Instância de SatisfactionSurvey
+            
+        Returns:
+            str: Status do token formatado
+        """
+        if not obj.token:
+            return mark_safe('<span style="color: #999;">Sem token</span>')
+        
+        if obj.token_expires_at and timezone.now() > obj.token_expires_at:
+            return mark_safe('<span style="color: #dc3545;">Expirado</span>')
+        
+        return mark_safe('<span style="color: #28a745;">Ativo</span>')
+    token_status.short_description = 'Status Token'
+    
+    def reset_token_action(self, request, queryset):
+        """
+        Ação para resetar token de pesquisas selecionadas.
+        
+        Permite que o usuário responda a pesquisa novamente.
+        
+        Args:
+            request: Requisição HTTP
+            queryset: QuerySet de pesquisas selecionadas
+        """
+        count = 0
+        for survey in queryset:
+            survey.reset_token()
+            count += 1
+        
+        self.message_user(
+            request,
+            f'{count} token(s) resetado(s) com sucesso. O usuário poderá responder a pesquisa novamente.'
+        )
+    reset_token_action.short_description = 'Resetar token (permitir nova resposta)'

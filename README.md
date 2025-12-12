@@ -107,18 +107,29 @@ Authorization: Token <seu_token_aqui>
 
 ### Endpoints Disponíveis
 
+**Categorias:**
 - `GET /api/glpi-categories/` - Lista categorias GLPI
 - `POST /api/glpi-categories/sync/` - Sincroniza categorias do GLPI via upload CSV (`Nome completo`, `ID`)
+
+**Tickets:**
 - `POST /api/tickets/webhook/` - Webhook para receber tickets do GLPI via n8n
 - `POST /api/tickets/classify/` - Classifica um ticket e sugere categoria
+
+**Sugestões de Categorias:**
 - `GET /api/category-suggestions/` - Lista sugestões de categorias pendentes
 - `POST /api/category-suggestions/preview/` - Gera prévia de sugestão de categoria (sem salvar)
 - `POST /api/category-suggestions/<id>/approve/` - Aprova uma sugestão de categoria
 - `POST /api/category-suggestions/<id>/reject/` - Rejeita uma sugestão de categoria
 
+**Pesquisa de Satisfação (Público):**
+- `GET /satisfaction-survey/<ticket_id>/rate/<rating>/` - Avalia atendimento (1-5) via botões no e-mail
+- `GET /satisfaction-survey/<ticket_id>/comment/` - Adiciona/edita comentário opcional
+
 Para mais detalhes, consulte o [README do backend](backend/README.md).
 
 ## 🔄 Fluxo de Trabalho
+
+### Classificação de Tickets
 
 1. **Recebimento de Ticket**: n8n envia ticket do GLPI via webhook
 2. **Classificação**: Sistema classifica o ticket usando IA (Gemini)
@@ -127,6 +138,15 @@ Para mais detalhes, consulte o [README do backend](backend/README.md).
 3. **Atualização**: Ticket é atualizado com a categoria sugerida (se encontrada)
 4. **Tickets não classificados**: Status alterado para "Aprovação" (status 10) no GLPI
 5. **Revisão de Sugestões**: Administrador revisa sugestões no Django Admin e aprova/rejeita
+
+### Pesquisa de Satisfação
+
+1. **Fechamento de Ticket**: GLPI envia e-mail com pesquisa de satisfação ao usuário
+2. **Avaliação**: Usuário clica em botão (1-5 estrelas) no e-mail
+3. **Token de Segurança**: Sistema gera token único na primeira requisição (anti-fraude)
+4. **Comentário Opcional**: Usuário pode adicionar comentário sobre o atendimento
+5. **Sincronização**: Django notifica n8n para atualizar pesquisa no GLPI
+6. **Proteção**: Token expira em 30 dias e valida requisições subsequentes
 
 ## 📝 Licença
 

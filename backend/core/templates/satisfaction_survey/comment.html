@@ -1,0 +1,61 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adicionar Comentário - Ticket #{{ ticket.id }}</title>
+    <link rel="stylesheet" href="{% static 'core/css/satisfaction_survey.css' %}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Adicionar Comentário</h1>
+            <p>Deseja adicionar algum comentário sobre o atendimento?</p>
+        </div>
+        
+        <div class="content">
+            {% if error %}
+            <div class="error-message">
+                <strong>Erro:</strong> {{ error }}
+            </div>
+            {% endif %}
+            
+            <div class="ticket-info">
+                <p><strong>Ticket:</strong> #{{ ticket.id }}</p>
+                <p><strong>Título:</strong> {{ ticket.name }}</p>
+            </div>
+            
+            {% if has_rating %}
+            <div class="rating-info">
+                <p><strong>Avaliação registrada:</strong> {{ survey.rating }}/5</p>
+            </div>
+            {% endif %}
+            
+            <form method="POST" action="{% if token %}?token={{ token }}{% endif %}">
+                {% csrf_token %}
+                {% if token %}
+                <input type="hidden" name="token" value="{{ token }}">
+                {% endif %}
+                
+                <div class="form-group">
+                    <label for="comment">Comentário (opcional)</label>
+                    <textarea 
+                        id="comment" 
+                        name="comment" 
+                        placeholder="Digite aqui seu comentário sobre o atendimento..."
+                        maxlength="1000"
+                    >{% if survey %}{{ survey.comment }}{% endif %}</textarea>
+                    <div class="hint">Máximo de 1000 caracteres</div>
+                </div>
+                
+                <div class="buttons">
+                    <button type="submit" class="btn btn-primary">Salvar Comentário</button>
+                    <a href="javascript:history.back()" class="btn btn-secondary" style="text-decoration: none; text-align: center; display: flex; align-items: center; justify-content: center;">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
+

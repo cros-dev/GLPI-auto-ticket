@@ -169,6 +169,55 @@ Resposta:
 - `POST /api/category-suggestions/<id>/reject/`
   - Rejeita uma sugestão de categoria pendente.
 
+## Pesquisa de Satisfação
+
+O sistema permite coletar avaliações de satisfação dos usuários sobre o atendimento recebido.
+
+### Endpoints Públicos (sem autenticação)
+
+- `GET /satisfaction-survey/<ticket_id>/rate/<rating>/`
+  - Avalia o atendimento diretamente via botões no e-mail (1-5 estrelas)
+  - Gera token único na primeira requisição (anti-fraude)
+  - Retorna página de sucesso com opção de adicionar comentário
+  - Exemplo: `http://localhost:8000/satisfaction-survey/2025121101/rate/5/`
+
+- `GET /satisfaction-survey/<ticket_id>/comment/?token=<token>`
+  - Exibe formulário para adicionar/editar comentário
+  - Requer token válido se a pesquisa já foi respondida
+
+- `POST /satisfaction-survey/<ticket_id>/comment/?token=<token>`
+  - Salva comentário opcional sobre o atendimento
+  - Requer token válido se a pesquisa já foi respondida
+
+### Sistema de Token Anti-Fraude
+
+- **Geração**: Token único é gerado automaticamente na primeira requisição
+- **Validação**: Token é validado em requisições subsequentes
+- **Expiração**: Tokens expiram após 30 dias
+- **Reset**: Administrador pode resetar token via Django Admin para permitir nova resposta
+
+### Integração com GLPI
+
+1. Configure o template de e-mail no GLPI com botões (1-5 estrelas) apontando para:
+   ```
+   http://seu-servidor/satisfaction-survey/##ticket.id##/rate/1/
+   http://seu-servidor/satisfaction-survey/##ticket.id##/rate/2/
+   ... (até 5)
+   ```
+
+2. Configure `N8N_WEBHOOK_URL` no `.env` para sincronizar com GLPI:
+   ```
+   N8N_WEBHOOK_URL=http://seu-n8n/webhook/glpi/survey-response
+   ```
+
+3. O Django notifica o n8n automaticamente após salvar a pesquisa, que atualiza o GLPI via API.
+
+### Gerenciamento no Admin
+
+- Visualize todas as pesquisas em `/admin/core/satisfactionsurvey/`
+- Veja status do token (Ativo/Expirado/Sem token)
+- Use a ação "Resetar token" para permitir nova resposta sem apagar a pesquisa
+
 ## Integração com n8n (exemplo rápido)
 
 No n8n, após extrair os campos do e-mail (como seu código JS), envie um POST para o endpoint `classify-email` com o JSON mostrado acima e **inclua o token no header**.
@@ -258,6 +307,7 @@ Configure as seguintes variáveis de ambiente no arquivo `.env` (incluído no `.
 - `GEMINI_API_KEY` — chave para Google Gemini API (opcional, para classificação com IA)
 - `GLPI_API_URL` — URL base da API do GLPI (futuro)
 - `GLPI_API_TOKEN` — token para autenticação na API do GLPI (futuro)
+- `N8N_WEBHOOK_URL` — URL do webhook n8n para atualizar pesquisa de satisfação no GLPI
 
 ### Configuração do Google Gemini (Opcional)
 
@@ -293,6 +343,15 @@ Para usar classificação com IA via Google Gemini:
 - Tickets sem classificação são automaticamente marcados com status "Aprovação" (status 10) no GLPI
 - Integração com n8n para atualização automática de status
 
+✅ **Pesquisa de Satisfação**
+- Coleta de avaliações (1-5 estrelas) via botões diretos no e-mail do GLPI
+- Comentários opcionais sobre o atendimento
+- Sistema de token único anti-fraude (gerado na primeira requisição)
+- Expiração automática de tokens (30 dias)
+- Integração com n8n para sincronização com GLPI
+- Ação no admin para resetar token e permitir nova resposta
+- Páginas HTML responsivas com CSS separado
+
 ---
 
-**Status**: Sistema completo de classificação automática com IA, geração de sugestões e revisão manual. Pronto para produção.
+**Status**: Sistema completo de classificação automática com IA, geração de sugestões, revisão manual e pesquisa de satisfação. Pronto para produção.

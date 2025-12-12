@@ -8,7 +8,10 @@ Este módulo contém os modelos principais:
 - CategorySuggestion: Sugestões de categorias geradas pela IA para revisão manual
 - SatisfactionSurvey: Pesquisas de satisfação respondidas pelos usuários
 """
+import secrets
+from datetime import timedelta
 from django.db import models
+from django.utils import timezone
 
 
 class GlpiCategory(models.Model):
@@ -28,7 +31,11 @@ class GlpiCategory(models.Model):
         help_text="Caminho completo (ex.: 'TI > Requisição > Acesso')"
     )
     parent = models.ForeignKey(
-        'self', null=True, blank=True, on_delete=models.SET_NULL, related_name='children'
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='children'
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -60,7 +67,8 @@ class Ticket(models.Model):
     )
 
     raw_payload = models.JSONField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text="Payload bruto vindo do GLPI para auditoria"
     )
 
@@ -76,8 +84,11 @@ class Ticket(models.Model):
 
     # Categoria
     category = models.ForeignKey(
-        GlpiCategory, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="tickets"
+        GlpiCategory,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="tickets"
     )
     category_name = models.CharField(max_length=255, null=True, blank=True)
     classification_method = models.CharField(max_length=50, null=True, blank=True)
@@ -93,7 +104,9 @@ class Ticket(models.Model):
 
     # Status do GLPI
     glpi_status = models.CharField(
-        max_length=50, null=True, blank=True,
+        max_length=50,
+        null=True,
+        blank=True,
         help_text="Status atual do ticket no GLPI"
     )
 
@@ -101,7 +114,8 @@ class Ticket(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     last_glpi_update = models.DateTimeField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text="Última vez que o GLPI atualizou esse ticket"
     )
 
@@ -155,8 +169,8 @@ class CategorySuggestion(models.Model):
     ]
     
     ticket = models.ForeignKey(
-        Ticket, 
-        on_delete=models.CASCADE, 
+        Ticket,
+        on_delete=models.CASCADE,
         related_name='category_suggestions',
         help_text="Ticket que gerou esta sugestão"
     )
@@ -190,8 +204,15 @@ class CategorySuggestion(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    reviewed_at = models.DateTimeField(null=True, blank=True)
-    reviewed_by = models.CharField(max_length=255, null=True, blank=True)
+    reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+    reviewed_by = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -206,13 +227,16 @@ class SatisfactionSurvey(models.Model):
     """
     Pesquisa de satisfação respondida pelo usuário sobre o atendimento recebido.
     
-    Armazena respostas de pesquisas de satisfação enviadas via Zoho Cliq Bot
-    após o fechamento/resolução de um ticket.
+    Armazena respostas de pesquisas de satisfação coletadas via botões diretos
+    no e-mail enviado pelo GLPI após o fechamento/resolução de um ticket.
     """
     
-    RESPONSE_CHOICES = [
-        ('yes', 'Sim'),
-        ('no', 'Não'),
+    RATING_CHOICES = [
+        (1, '1 - Muito Insatisfeito'),
+        (2, '2 - Insatisfeito'),
+        (3, '3 - Neutro'),
+        (4, '4 - Satisfeito'),
+        (5, '5 - Muito Satisfeito'),
     ]
     
     ticket = models.ForeignKey(
@@ -222,10 +246,9 @@ class SatisfactionSurvey(models.Model):
         help_text="Ticket relacionado à pesquisa de satisfação"
     )
     
-    response = models.CharField(
-        max_length=10,
-        choices=RESPONSE_CHOICES,
-        help_text="Resposta do usuário: sim ou não"
+    rating = models.IntegerField(
+        choices=RATING_CHOICES,
+        help_text="Nota de satisfação do usuário (1 a 5)"
     )
     
     comment = models.TextField(
@@ -233,7 +256,71 @@ class SatisfactionSurvey(models.Model):
         help_text="Comentário opcional do usuário sobre o atendimento"
     )
     
+    token = models.CharField(
+        max_length=64,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="Token único de segurança para validar a pesquisa (gerado na primeira requisição)"
+    )
+    
+    token_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Data de expiração do token (padrão: 30 dias após criação)"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    def generate_token(self):
+        """
+        Gera um token único seguro para a pesquisa.
+        
+        Returns:
+            str: Token único gerado
+        """
+        if not self.token:
+            self.token = secrets.token_urlsafe(32)
+            # Expira em 30 dias
+            self.token_expires_at = timezone.now() + timedelta(days=30)
+            self.save(update_fields=['token', 'token_expires_at'])
+        return self.token
+    
+    def is_token_valid(self, provided_token):
+        """
+        Valida se o token fornecido é válido e não expirou.
+        
+        Args:
+            provided_token: Token fornecido pelo usuário
+            
+        Returns:
+            bool: True se o token é válido, False caso contrário
+        """
+        if not self.token or not provided_token:
+            return False
+        
+        if self.token != provided_token:
+            return False
+        
+        # Verifica expiração
+        if self.token_expires_at and timezone.now() > self.token_expires_at:
+            return False
+        
+        return True
+    
+    def reset_token(self):
+        """
+        Reseta o token da pesquisa, permitindo nova resposta.
+        
+        Remove o token atual completamente. Um novo token será gerado
+        automaticamente na próxima requisição do usuário.
+        
+        Returns:
+            None
+        """
+        self.token = None
+        self.token_expires_at = None
+        self.save(update_fields=['token', 'token_expires_at'])
     
     class Meta:
         ordering = ['-created_at']
@@ -244,4 +331,4 @@ class SatisfactionSurvey(models.Model):
         ]
     
     def __str__(self):
-        return f"Pesquisa Ticket #{self.ticket.id} - {self.get_response_display()} ({self.created_at.strftime('%d/%m/%Y %H:%M')})"
+        return f"Pesquisa Ticket #{self.ticket.id} - {self.rating}/5 ({self.created_at.strftime('%d/%m/%Y %H:%M')})"
