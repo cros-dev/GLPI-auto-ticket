@@ -13,11 +13,10 @@ Define todas as rotas da API organizadas por funcionalidade:
 from django.urls import path
 from .views import (
     GlpiCategoryListView,
-    GlpiCategorySyncView,
+    GlpiCategorySyncFromApiView,
     GlpiWebhookView,
     TicketListView,
     TicketDetailView,
-    AttachmentDownloadView,
     SetGlpiIdView,
     TicketClassificationView,
     CategorySuggestionListView,
@@ -31,7 +30,7 @@ urlpatterns = [
     # 1. SINCRONIZAÇÃO E LISTA DE CATEGORIAS
     # =========================================================
     path('glpi/categories/', GlpiCategoryListView.as_view(), name='glpi-category-list'),
-    path('glpi/categories/sync/', GlpiCategorySyncView.as_view(), name='glpi-category-sync'),
+    path('glpi/categories/sync-from-api/', GlpiCategorySyncFromApiView.as_view(), name='glpi-category-sync-from-api'),
 
     # =========================================================
     # 2. WEBHOOK DE TICKET (GLPI -> n8n -> Django)
@@ -45,12 +44,7 @@ urlpatterns = [
     path('tickets/<int:pk>/', TicketDetailView.as_view(), name='ticket-detail'),
 
     # =========================================================
-    # 4. DOWNLOAD DE ANEXOS
-    # =========================================================
-    path('attachments/<int:pk>/download/', AttachmentDownloadView.as_view(), name='attachment-download'),
-
-    # =========================================================
-    # 5. CONFIGURAÇÃO FINAL DO GLPI ID
+    # 4. CONFIGURAÇÃO FINAL DO GLPI ID
     # =========================================================
     path('tickets/<int:pk>/set-glpi-id/', SetGlpiIdView.as_view(), name='ticket-set-glpi-id'),
 

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import mark_safe
 from django.utils import timezone
-from .models import GlpiCategory, Ticket, Attachment, CategorySuggestion, SatisfactionSurvey
+from .models import GlpiCategory, Ticket, CategorySuggestion, SatisfactionSurvey
 from .services import get_category_path
 
 class Level1Filter(admin.SimpleListFilter):
@@ -183,16 +183,6 @@ class TicketAdmin(admin.ModelAdmin):
     
     satisfaction_survey_display.short_description = 'Pesquisa de Satisfação'
 
-@admin.register(Attachment)
-class AttachmentAdmin(admin.ModelAdmin):
-    """
-    Configuração do admin para o modelo Attachment.
-    
-    Exibe anexos vinculados a tickets, com metadados e download do arquivo.
-    """
-    list_display = ('id', 'name', 'ticket', 'mime_type', 'size')
-    readonly_fields = ('data',)
-    
 @admin.register(GlpiCategory)
 class GlpiCategoryAdmin(admin.ModelAdmin):
     """

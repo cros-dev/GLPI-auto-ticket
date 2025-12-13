@@ -91,17 +91,18 @@ print(t.key)
 
 ## Endpoints API implementados
 
-- `GET /api/glpi-categories/`
+- `GET /api/glpi/categories/`
   - Retorna lista de categorias GLPI salvas localmente.
 
-- `POST /api/glpi-categories/sync/`
-  - Recebe um arquivo CSV exportado do GLPI (colunas `Nome completo` e `ID`) e faz upsert no banco, preservando os IDs originais.
-  - Exemplo de uso (PowerShell):
+- `POST /api/glpi/categories/sync-from-api/`
+  - Sincroniza categorias diretamente da API Legacy do GLPI.
+  - Busca todas as categorias ITIL e faz upsert no banco, preservando os IDs originais.
+  - Requer autenticação por token.
+  - Exemplo de uso:
 
-```powershell
-curl -X POST http://localhost:8000/api/glpi-categories/sync/ `
-  -H "Authorization: Token b0cdfd8b96b6d643a94278785678483c44ce8e3c" `
-  -F "file=@categorias_glpi.csv"
+```bash
+curl -X POST http://localhost:8000/api/glpi/categories/sync-from-api/ \
+  -H "Authorization: Token seu_token_aqui"
 ```
 
 - `POST /api/tickets/classify/`
@@ -218,54 +219,63 @@ O sistema permite coletar avaliações de satisfação dos usuários sobre o ate
 - Veja status do token (Ativo/Expirado/Sem token)
 - Use a ação "Resetar token" para permitir nova resposta sem apagar a pesquisa
 
-## Integração com n8n (exemplo rápido)
+## Integração com n8n
 
-No n8n, após extrair os campos do e-mail (como seu código JS), envie um POST para o endpoint `classify-email` com o JSON mostrado acima e **inclua o token no header**.
+### Webhook de Tickets
 
-### Configuração no n8n
+O n8n deve enviar tickets do GLPI para o endpoint de webhook:
 
-1. Crie ou abra um nó "HTTP Request".
-2. Defina:
-   - **Method**: POST
-   - **URL**: `http://localhost:8000/api/classify-email/`
-   - **Headers**: `Authorization: Token b0cdfd8b96b6d643a94278785678483c44ce8e3c`
-   - **Body**: JSON com `from_email`, `to_email`, `subject`, `body`
-3. Salve e teste.
+**Endpoint**: `POST /api/glpi/webhook/ticket/`
 
-Exemplo JSON para o body:
+**Headers**:
+```
+Authorization: Token seu_token_aqui
+Content-Type: application/json
+```
 
+**Payload esperado**:
 ```json
 {
-  "from_email": "user@example.com",
-  "to_email": "helpdesk@example.com",
-  "subject": "Problema com impressora",
-  "body": "A impressora do setor não puxa papel..."
+  "id": 2025121101,
+  "name": "Título do ticket",
+  "content": "Conteúdo do ticket (HTML)",
+  "date_creation": "2025-12-11T10:00:00-04:00",
+  "user_recipient_id": 200,
+  "user_recipient_name": "Nome do Usuário",
+  "location": "Localização",
+  "category_name": "Nome da Categoria",
+  "entity_id": 0,
+  "entity_name": "Nome da Entidade",
+  "team_assigned_id": 16,
+  "team_assigned_name": "Nome da Equipe"
 }
 ```
 
-Se quiser sincronizar as categorias do GLPI, o n8n pode chamar `POST /api/glpi-categories/sync/` com a lista de categorias obtidas do GLPI.
+### Sincronização de Categorias
+
+Para sincronizar categorias do GLPI, o n8n pode chamar:
+
+**Endpoint**: `POST /api/glpi/categories/sync-from-api/`
+
+**Headers**:
+```
+Authorization: Token seu_token_aqui
+```
+
+Este endpoint busca todas as categorias ITIL diretamente da API Legacy do GLPI e sincroniza automaticamente.
 
 ### Exemplos de teste (curl)
 
-**Classificar um e-mail**:
-```powershell
-curl -X POST http://localhost:8000/api/classify-email/ `
-  -H "Authorization: Token b0cdfd8b96b6d643a94278785678483c44ce8e3c" `
-  -H "Content-Type: application/json" `
-  -d "{\"from_email\":\"user@example.com\",\"subject\":\"Impressora\",\"body\":\"Não funciona\"}"
-```
-
 **Listar categorias GLPI**:
-```powershell
-curl -X GET http://localhost:8000/api/glpi-categories/ `
-  -H "Authorization: Token b0cdfd8b96b6d643a94278785678483c44ce8e3c"
+```bash
+curl -X GET http://localhost:8000/api/glpi/categories/ \
+  -H "Authorization: Token seu_token_aqui"
 ```
 
-**Sincronizar categorias do GLPI (via CSV)**:
-```powershell
-curl -X POST http://localhost:8000/api/glpi-categories/sync/ `
-  -H "Authorization: Token b0cdfd8b96b6d643a94278785678483c44ce8e3c" `
-  -F "file=@categorias_glpi.csv"
+**Sincronizar categorias do GLPI (via API)**:
+```bash
+curl -X POST http://localhost:8000/api/glpi/categories/sync-from-api/ \
+  -H "Authorization: Token seu_token_aqui"
 ```
 
 **Gerar prévia de sugestão de categoria**:
@@ -278,19 +288,19 @@ curl -X POST http://localhost:8000/api/category-suggestions/preview/ `
 
 ### Exemplo em Python (requests)
 
+**Classificar um ticket**:
 ```python
 import requests
 
-url = "http://localhost:8000/api/classify-email/"
+url = "http://localhost:8000/api/tickets/classify/"
 headers = {
-    "Authorization": "Token b0cdfd8b96b6d643a94278785678483c44ce8e3c",
+    "Authorization": "Token seu_token_aqui",
     "Content-Type": "application/json"
 }
 payload = {
-    "from_email": "user@example.com",
-    "to_email": "helpdesk@example.com",
-    "subject": "Problema com impressora",
-    "body": "A impressora do setor não puxa papel..."
+    "title": "Impressora não funciona",
+    "content": "A impressora do setor não puxa papel...",
+    "glpi_ticket_id": 123
 }
 
 response = requests.post(url, json=payload, headers=headers)
@@ -305,8 +315,10 @@ Configure as seguintes variáveis de ambiente no arquivo `.env` (incluído no `.
 - `DJANGO_DEBUG` — True/False
 - `DJANGO_ALLOWED_HOSTS` — hosts separados por vírgula
 - `GEMINI_API_KEY` — chave para Google Gemini API (opcional, para classificação com IA)
-- `GLPI_API_URL` — URL base da API do GLPI (futuro)
-- `GLPI_API_TOKEN` — token para autenticação na API do GLPI (futuro)
+- `GLPI_LEGACY_API_URL` — URL da API Legacy do GLPI (ex: `http://172.16.0.180:81/apirest.php`)
+- `GLPI_LEGACY_API_USER` — usuário para autenticação na API Legacy
+- `GLPI_LEGACY_API_PASSWORD` — senha para autenticação na API Legacy
+- `GLPI_LEGACY_APP_TOKEN` — token do aplicativo (opcional, se configurado no GLPI)
 - `N8N_WEBHOOK_URL` — URL do webhook n8n para atualizar pesquisa de satisfação no GLPI
 
 ### Configuração do Google Gemini (Opcional)
@@ -327,6 +339,7 @@ Para usar classificação com IA via Google Gemini:
 - Classificação usando Google Gemini AI
 - Geração automática de sugestões quando não encontra categoria exata
 - Metadados de classificação (método e confiança) armazenados no ticket
+- Atualização automática do ticket com categoria sugerida
 
 ✅ **Sugestões de Categorias**
 - Geração automática de sugestões hierárquicas quando categoria exata não é encontrada
@@ -335,9 +348,10 @@ Para usar classificação com IA via Google Gemini:
 - Aprovação/rejeição de sugestões via API
 
 ✅ **Sincronização de Categorias**
-- Importação via CSV com preservação de IDs do GLPI
+- Sincronização automática via API Legacy do GLPI com preservação de IDs
 - Suporte a hierarquias complexas (até 6 níveis)
 - Tratamento do prefixo "TI" nos caminhos
+- Remoção automática de categorias que não existem mais no GLPI
 
 ✅ **Gerenciamento de Tickets Não Classificados**
 - Tickets sem classificação são automaticamente marcados com status "Aprovação" (status 10) no GLPI

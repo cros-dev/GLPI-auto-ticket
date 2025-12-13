@@ -138,6 +138,12 @@ GLPI_API_URL = os.getenv('GLPI_API_URL')
 GLPI_API_TOKEN = os.getenv('GLPI_API_TOKEN')
 GLPI_BASE_URL = os.environ.get('GLPI_BASE_URL', 'http://localhost')
 
+# API Legacy do GLPI (para sincronização de categorias)
+GLPI_LEGACY_API_URL = os.environ.get('GLPI_LEGACY_API_URL', '')
+GLPI_LEGACY_API_USER = os.environ.get('GLPI_LEGACY_API_USER', '')
+GLPI_LEGACY_API_PASSWORD = os.environ.get('GLPI_LEGACY_API_PASSWORD', '')
+GLPI_LEGACY_APP_TOKEN = os.environ.get('GLPI_LEGACY_APP_TOKEN', '')
+
 # Webhook n8n para atualizar pesquisa de satisfação no GLPI
 N8N_WEBHOOK_URL = os.getenv('N8N_WEBHOOK_URL')
 
