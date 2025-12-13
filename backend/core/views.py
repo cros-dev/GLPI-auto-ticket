@@ -15,6 +15,10 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse, Http404
 from django.utils import timezone
+from django.shortcuts import render
+from django.conf import settings
+import requests
+import logging
 
 from .models import GlpiCategory, Ticket, Attachment, CategorySuggestion, SatisfactionSurvey
 from .serializers import (
@@ -26,7 +30,50 @@ from .serializers import (
     SatisfactionSurveySerializer
 )
 from .utils import clean_html_content
-from .services import classify_ticket 
+from .services import (
+    classify_ticket,
+    classify_ticket_with_gemini,
+    generate_category_suggestion,
+    determine_ticket_type
+)
+
+logger = logging.getLogger(__name__)
+
+
+# =========================================================
+# FUNÇÕES AUXILIARES
+# =========================================================
+
+def _notify_n8n_survey(ticket_id, rating, comment):
+    """
+    Notifica n8n para atualizar pesquisa de satisfação no GLPI.
+    
+    Args:
+        ticket_id: ID do ticket
+        rating: Nota de satisfação (1-5)
+        comment: Comentário opcional
+    """
+    n8n_webhook_url = getattr(settings, 'N8N_WEBHOOK_URL', None)
+    
+    if not n8n_webhook_url:
+        return
+    
+    try:
+        payload = {
+            'ticket_id': ticket_id,
+            'rating': rating,
+            'comment': comment or '',
+            'type': 'satisfaction-survey-update'
+        }
+        
+        response = requests.post(
+            n8n_webhook_url,
+            json=payload,
+            timeout=10
+        )
+        response.raise_for_status()
+    except requests.RequestException as e:
+        logger.error(f"Erro ao notificar n8n: {str(e)}")
 
 
 # =========================================================
@@ -371,7 +418,7 @@ class SetGlpiIdView(APIView):
         try:
             ticket = Ticket.objects.get(pk=pk)
         except Ticket.DoesNotExist:
-            return Response({"detail": "Ticket not found"}, status=404)
+            return Response({"detail": "Ticket não encontrado"}, status=status.HTTP_404_NOT_FOUND)
 
         status_update = request.data.get("status")
         glpi_updates = request.data.get("glpi_updates")
@@ -467,7 +514,6 @@ class TicketClassificationView(APIView):
                     ticket.glpi_status = "Aprovação"
                     ticket.save()
                     
-                    from .models import CategorySuggestion
                     suggestion = CategorySuggestion.objects.filter(
                         ticket=ticket,
                         status='pending'
@@ -639,8 +685,6 @@ class CategorySuggestionPreviewView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        from .services import classify_ticket_with_gemini, generate_category_suggestion
-        
         result = classify_ticket_with_gemini(title, content)
         
         if result and isinstance(result, dict) and 'error' in result:
@@ -674,7 +718,6 @@ class CategorySuggestionPreviewView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        from .services import determine_ticket_type
         path_parts = [part.strip() for part in suggested_path.split('>') if part.strip()]
         ticket_type, ticket_type_label = determine_ticket_type(path_parts)
         
@@ -691,62 +734,189 @@ class CategorySuggestionPreviewView(APIView):
 # 8. PESQUISA DE SATISFAÇÃO
 # =========================================================
 
-class SatisfactionSurveySubmitView(APIView):
+class SatisfactionSurveyRateView(APIView):
     """
-    Recebe e salva resposta da pesquisa de satisfação do usuário.
+    Recebe avaliação direta via GET e salva imediatamente.
     
-    Endpoint: POST /api/satisfaction-survey/submit/
-    Chamado pelo Zoho Cliq Bot quando o usuário responde à pesquisa.
+    Endpoint: GET /satisfaction-survey/<ticket_id>/rate/<rating>/?token=<token>
     
-    Requer autenticação por token no header:
-    Authorization: Token <token_aqui>
-    
-    Recebe ticket_id, response (yes/no) e comment opcional.
+    Usado por botões no e-mail do GLPI que enviam rating diretamente.
+    Gera token na primeira requisição e valida nas subsequentes.
+    Retorna página de sucesso ou redireciona para página de comentário.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = []  # Público - sem autenticação
     
-    def post(self, request):
-        serializer = SatisfactionSurveySerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
+    def get(self, request, ticket_id, rating):
+        """Processa avaliação direta e salva."""
+        try:
+            ticket_id = int(ticket_id)
+            rating = int(rating)
+        except (ValueError, TypeError):
+            return render(request, 'satisfaction_survey/success.html', {
+                'error': 'Parâmetros inválidos.',
+                'rating': None
+            }, status=400)
         
-        ticket_id = data.get('ticket_id')
+        # Valida rating
+        if rating < 1 or rating > 5:
+            return render(request, 'satisfaction_survey/success.html', {
+                'error': 'Rating deve ser entre 1 e 5.',
+                'rating': None
+            }, status=400)
         
         try:
             ticket = Ticket.objects.get(id=ticket_id)
         except Ticket.DoesNotExist:
-            return Response(
-                {"detail": f"Ticket {ticket_id} não encontrado."},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return render(request, 'satisfaction_survey/success.html', {
+                'error': f'Ticket #{ticket_id} não encontrado.',
+                'rating': None
+            }, status=status.HTTP_404_NOT_FOUND)
         
+        # Busca pesquisa existente
         existing_survey = SatisfactionSurvey.objects.filter(ticket=ticket).first()
+        provided_token = request.GET.get('token', '').strip()
         
+        # Se já existe pesquisa, valida token apenas se já tem token e rating
         if existing_survey:
-            existing_survey.response = data.get('response')
-            existing_survey.comment = data.get('comment', '')
+            # Se já tem token E rating, valida o token antes de permitir atualização
+            if existing_survey.token and existing_survey.rating is not None:
+                if not provided_token or not existing_survey.is_token_valid(provided_token):
+                    return render(request, 'satisfaction_survey/success.html', {
+                        'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
+                        'rating': None
+                    }, status=403)
+            
+            # Atualiza rating
+            existing_survey.rating = rating
+            # Se não tinha token, gera agora (primeira requisição ou pesquisa antiga)
+            if not existing_survey.token:
+                existing_survey.generate_token()
             existing_survey.save()
             survey = existing_survey
-            created = False
-            message = "Pesquisa de satisfação atualizada com sucesso."
-            status_code = status.HTTP_200_OK
         else:
+            # Cria nova pesquisa e gera token
             survey = SatisfactionSurvey.objects.create(
                 ticket=ticket,
-                response=data.get('response'),
-                comment=data.get('comment', '')
+                rating=rating,
+                comment=''
             )
-            created = True
-            message = "Pesquisa de satisfação registrada com sucesso."
-            status_code = status.HTTP_201_CREATED
+            survey.generate_token()
         
-        return Response(
-            {
-                "detail": message,
-                "survey_id": survey.id,
-                "ticket_id": ticket_id,
-                "response": survey.get_response_display(),
-                "created": created
-            },
-            status=status_code
-        )
+        # Notifica n8n
+        _notify_n8n_survey(ticket_id, rating, survey.comment)
+        
+        # Verifica se há comentário na query string (opcional)
+        comment = request.GET.get('comment', '').strip()
+        if comment:
+            survey.comment = comment
+            survey.save()
+            _notify_n8n_survey(ticket_id, rating, comment)
+        
+        # Renderiza página de sucesso com opção de adicionar comentário
+        return render(request, 'satisfaction_survey/success.html', {
+            'rating': rating,
+            'ticket_id': ticket_id,
+            'ticket': ticket,
+            'has_comment': bool(survey.comment),
+            'comment': survey.comment,
+            'token': survey.token  # Token para uso futuro
+        })
+    
+class SatisfactionSurveyCommentView(APIView):
+    """
+    Página para adicionar/editar comentário na pesquisa de satisfação.
+    
+    Endpoint: GET /satisfaction-survey/<ticket_id>/comment/ - Exibe formulário
+    Endpoint: POST /satisfaction-survey/<ticket_id>/comment/ - Salva comentário
+    """
+    permission_classes = []  # Público - sem autenticação
+    
+    def get(self, request, ticket_id):
+        """Renderiza formulário para adicionar comentário."""
+        try:
+            ticket_id = int(ticket_id)
+        except (ValueError, TypeError):
+            return render(request, 'satisfaction_survey/comment.html', {
+                'error': 'ID do ticket inválido.'
+            }, status=400)
+        
+        try:
+            ticket = Ticket.objects.get(id=ticket_id)
+        except Ticket.DoesNotExist:
+            return render(request, 'satisfaction_survey/comment.html', {
+                'error': f'Ticket #{ticket_id} não encontrado.'
+            }, status=404)
+        
+        survey = SatisfactionSurvey.objects.filter(ticket=ticket).first()
+        provided_token = request.GET.get('token', '').strip()
+        
+        # Valida token se a pesquisa já existe e tem rating
+        if survey and survey.rating is not None:
+            if not provided_token or not survey.is_token_valid(provided_token):
+                return render(request, 'satisfaction_survey/comment.html', {
+                    'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
+                    'ticket': ticket
+                }, status=403)
+        
+        context = {
+            'ticket': ticket,
+            'survey': survey,
+            'has_rating': survey is not None and survey.rating is not None,
+            'token': survey.token if survey else None
+        }
+        
+        return render(request, 'satisfaction_survey/comment.html', context)
+    
+    def post(self, request, ticket_id):
+        """Salva comentário na pesquisa."""
+        try:
+            ticket_id = int(ticket_id)
+        except (ValueError, TypeError):
+            return render(request, 'satisfaction_survey/comment.html', {
+                'error': 'ID do ticket inválido.'
+            }, status=400)
+        
+        try:
+            ticket = Ticket.objects.get(id=ticket_id)
+        except Ticket.DoesNotExist:
+            return render(request, 'satisfaction_survey/comment.html', {
+                'error': f'Ticket #{ticket_id} não encontrado.'
+            }, status=404)
+        
+        comment = request.POST.get('comment', '').strip()
+        provided_token = request.POST.get('token', request.GET.get('token', '')).strip()
+        
+        survey = SatisfactionSurvey.objects.filter(ticket=ticket).first()
+        
+        # Valida token se a pesquisa já existe e tem rating
+        if survey and survey.rating is not None:
+            if not provided_token or not survey.is_token_valid(provided_token):
+                return render(request, 'satisfaction_survey/comment.html', {
+                    'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
+                    'ticket': ticket,
+                    'survey': survey
+                }, status=403)
+        
+        if not survey:
+            # Se não existe pesquisa, cria com rating padrão 3
+            survey = SatisfactionSurvey.objects.create(
+                ticket=ticket,
+                rating=3,
+                comment=comment
+            )
+            survey.generate_token()
+        else:
+            survey.comment = comment
+            survey.save()
+        
+        # Notifica n8n
+        _notify_n8n_survey(ticket_id, survey.rating, comment)
+        
+        return render(request, 'satisfaction_survey/success.html', {
+            'rating': survey.rating,
+            'ticket_id': ticket_id,
+            'ticket': ticket,
+            'has_comment': True,
+            'comment': comment,
+            'token': survey.token
+        })

@@ -1,0 +1,87 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obrigado pela sua avaliação!</title>
+    <link rel="stylesheet" href="{% static 'core/css/satisfaction_survey.css' %}">
+</head>
+<body>
+    <div class="container">
+        {% if error %}
+        <div class="error-icon"></div>
+        {% else %}
+        <div class="success-icon"></div>
+        {% endif %}
+        
+        <div class="content" style="text-align: center;">
+            {% if error %}
+            <h1 style="color: #dc3545;">Acesso Negado</h1>
+            <div class="error-message" style="margin: 20px 0; padding: 20px; background: #fee; border-left: 4px solid #dc3545; border-radius: 8px; text-align: left;">
+                <strong>Erro:</strong> {{ error }}
+            </div>
+            <p style="color: #666; margin-top: 20px;">
+                Esta pesquisa já foi respondida. Se você acredita que isso é um erro, entre em contato com o suporte.
+            </p>
+            {% else %}
+            <h1>Obrigado pela sua avaliação!</h1>
+            <p>Sua pesquisa de satisfação foi registrada com sucesso.</p>
+            
+            {% if rating %}
+            <div class="rating-display">
+                <strong>Avaliação: {{ rating }}/5</strong>
+            </div>
+            {% endif %}
+            
+            {% if comment %}
+            <div class="comment-form">
+                <h3>Seu comentário:</h3>
+                <form method="POST" action="/satisfaction-survey/{{ ticket_id }}/comment/{% if token %}?token={{ token }}{% endif %}">
+                    {% csrf_token %}
+                    {% if token %}
+                    <input type="hidden" name="token" value="{{ token }}">
+                    {% endif %}
+                    <textarea 
+                        name="comment" 
+                        placeholder="Digite aqui seu comentário sobre o atendimento..."
+                        maxlength="1000"
+                    >{{ comment }}</textarea>
+                    <div class="comment-hint">Máximo de 1000 caracteres</div>
+                    <button type="submit" class="btn-submit">
+                        Atualizar Comentário
+                    </button>
+                </form>
+            </div>
+            {% elif not has_comment and ticket_id %}
+            <div class="comment-form">
+                <h3>Deseja adicionar um comentário? (Opcional)</h3>
+                <form method="POST" action="/satisfaction-survey/{{ ticket_id }}/comment/{% if token %}?token={{ token }}{% endif %}">
+                    {% csrf_token %}
+                    {% if token %}
+                    <input type="hidden" name="token" value="{{ token }}">
+                    {% endif %}
+                    <textarea 
+                        name="comment" 
+                        placeholder="Digite aqui seu comentário sobre o atendimento..."
+                        maxlength="1000"
+                    ></textarea>
+                    <div class="comment-hint">Máximo de 1000 caracteres</div>
+                    <button type="submit" class="btn-submit">
+                        Enviar Comentário
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+            
+            <p>Seu feedback é muito importante para continuarmos aprimorando nossos serviços.</p>
+            {% endif %}
+        </div>
+        
+        <div class="footer">
+            <p>Equipe de Suporte</p>
+        </div>
+    </div>
+</body>
+</html>
+

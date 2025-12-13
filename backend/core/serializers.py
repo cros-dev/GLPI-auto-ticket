@@ -109,15 +109,15 @@ class GlpiWebhookSerializer(serializers.Serializer):
     date_creation = serializers.DateTimeField()
     user_recipient_id = serializers.IntegerField()
     user_recipient_name = serializers.CharField()
-    location = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    location = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     name = serializers.CharField()
     content = serializers.CharField()
     category_id = serializers.IntegerField(required=False, allow_null=True)
-    category_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    category_name = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     entity_id = serializers.IntegerField(required=False, allow_null=True)
-    entity_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    entity_name = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     team_assigned_id = serializers.IntegerField(required=False, allow_null=True)
-    team_assigned_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    team_assigned_name = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
 
 # =========================================================
@@ -150,17 +150,17 @@ class TicketClassificationResponseSerializer(serializers.Serializer):
     adicionais sobre o resultado da classificação.
     """
     suggested_category_name = serializers.CharField()
-    suggested_category_id = serializers.IntegerField(allow_null=True)
+    suggested_category_id = serializers.IntegerField(required=False, allow_null=True)
     confidence = serializers.CharField(help_text="Nível de confiança: high, medium, low")
     classification_method = serializers.CharField(help_text="Método usado: 'ai' (Google Gemini) ou 'keywords' (palavras-chave)")
     ticket_type = serializers.IntegerField(
-        allow_null=True,
         required=False,
+        allow_null=True,
         help_text="1 = incidente, 2 = requisição"
     )
     ticket_type_label = serializers.CharField(
-        allow_null=True,
         required=False,
+        allow_null=True,
         help_text="Nome do tipo (incidente/requisição)"
     )
 
@@ -173,19 +173,20 @@ class SatisfactionSurveySerializer(serializers.Serializer):
     """
     Serializer para receber dados da pesquisa de satisfação.
     
-    Valida os dados recebidos do Zoho Cliq Bot quando o usuário
-    responde à pesquisa de satisfação sobre o atendimento.
+    Valida os dados recebidos quando o usuário responde à pesquisa
+    de satisfação via botões no e-mail ou formulário de comentário.
     """
     ticket_id = serializers.IntegerField(
         help_text="ID do ticket relacionado à pesquisa"
     )
-    response = serializers.ChoiceField(
-        choices=['yes', 'no'],
-        help_text="Resposta do usuário: 'yes' (sim) ou 'no' (não)"
+    rating = serializers.IntegerField(
+        min_value=1,
+        max_value=5,
+        help_text="Nota de satisfação do usuário (1 a 5)"
     )
     comment = serializers.CharField(
         required=False,
+        allow_null=True,
         allow_blank=True,
-        max_length=1000,
         help_text="Comentário opcional do usuário sobre o atendimento"
     )
