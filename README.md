@@ -6,8 +6,9 @@ Sistema de classificação automática de tickets do GLPI usando Django REST Fra
 
 Este projeto automatiza a classificação de tickets do GLPI (Gestionnaire Libre de Parc Informatique) através de:
 - **Classificação por IA**: Utiliza Google Gemini AI para análise inteligente do conteúdo dos tickets
-- **Integração com n8n**: Webhook para receber tickets do GLPI via n8n
-- **Sincronização de categorias**: API para sincronizar categorias hierárquicas do GLPI
+- **Integração com n8n**: Webhook para receber tickets do GLPI via n8n e atualizar pesquisas de satisfação
+- **Sincronização de categorias**: API para sincronizar categorias hierárquicas diretamente da API Legacy do GLPI
+- **Pesquisa de Satisfação**: Coleta de avaliações dos usuários via botões no e-mail do GLPI
 
 ## 🚀 Tecnologias
 
@@ -61,12 +62,16 @@ pip install -r requirements.txt
 ```
 
 5. Configure as variáveis de ambiente:
-Crie um arquivo `.env` na pasta `backend/`:
+Crie um arquivo `.env` na pasta `backend/` (veja `backend/env.example` para referência):
 ```env
 DJANGO_SECRET_KEY=sua_chave_secreta_aqui
 DJANGO_DEBUG=True
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 GEMINI_API_KEY=sua_chave_gemini_aqui  # Opcional
+GLPI_LEGACY_API_URL=http://172.16.0.180:81/apirest.php
+GLPI_LEGACY_API_USER=glpi
+GLPI_LEGACY_API_PASSWORD=sua_senha
+N8N_WEBHOOK_URL=http://seu-n8n/webhook/glpi/survey-response  # Opcional
 ```
 
 6. Execute as migrações:
@@ -108,11 +113,13 @@ Authorization: Token <seu_token_aqui>
 ### Endpoints Disponíveis
 
 **Categorias:**
-- `GET /api/glpi-categories/` - Lista categorias GLPI
-- `POST /api/glpi-categories/sync/` - Sincroniza categorias do GLPI via upload CSV (`Nome completo`, `ID`)
+- `GET /api/glpi/categories/` - Lista categorias GLPI
+- `POST /api/glpi/categories/sync-from-api/` - Sincroniza categorias diretamente da API Legacy do GLPI
 
 **Tickets:**
-- `POST /api/tickets/webhook/` - Webhook para receber tickets do GLPI via n8n
+- `POST /api/glpi/webhook/ticket/` - Webhook para receber tickets do GLPI via n8n
+- `GET /api/tickets/` - Lista todos os tickets
+- `GET /api/tickets/<id>/` - Detalhes de um ticket
 - `POST /api/tickets/classify/` - Classifica um ticket e sugere categoria
 
 **Sugestões de Categorias:**

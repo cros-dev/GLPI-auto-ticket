@@ -7,7 +7,7 @@ Este módulo contém todos os serializers usados para:
 - Transformação entre modelos Django e JSON
 """
 from rest_framework import serializers
-from .models import Ticket, Attachment, GlpiCategory, SatisfactionSurvey
+from .models import Ticket, GlpiCategory, SatisfactionSurvey
 
 
 # =========================================================
@@ -28,25 +28,7 @@ class GlpiCategorySerializer(serializers.ModelSerializer):
 
 
 # =========================================================
-# 2. ANEXOS (METADADOS)
-# =========================================================
-
-class AttachmentSerializer(serializers.ModelSerializer):
-    """
-    Serializer para anexos vinculados a um ticket.
-    
-    Retorna apenas metadados do anexo (nome, tipo MIME, tamanho).
-    O arquivo binário em si é entregue pelo endpoint de download.
-    """
-
-    class Meta:
-        model = Attachment
-        fields = ["id", "name", "mime_type", "size", "created_at"]
-        read_only_fields = ["id", "created_at"]
-
-
-# =========================================================
-# 3. TICKETS
+# 2. TICKETS
 # =========================================================
 
 class TicketSerializer(serializers.ModelSerializer):
@@ -54,10 +36,8 @@ class TicketSerializer(serializers.ModelSerializer):
     Serializer para tickets armazenados localmente.
     
     Representa o estado sincronizado do GLPI via n8n.
-    Inclui os metadados dos anexos aninhados (attachments) e todos os
-    campos principais do ticket.
+    Inclui todos os campos principais do ticket.
     """
-    attachments = AttachmentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Ticket
@@ -77,7 +57,6 @@ class TicketSerializer(serializers.ModelSerializer):
             "team_assigned_id",
             "team_assigned_name",
             "raw_payload",
-            "attachments",
             "last_glpi_update",
             "created_at",
             "updated_at",
@@ -86,7 +65,6 @@ class TicketSerializer(serializers.ModelSerializer):
             "id",
             "created_at",
             "updated_at",
-            "attachments",
             "last_glpi_update",
             "raw_payload",
             "classification_method",

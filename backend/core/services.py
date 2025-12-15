@@ -21,10 +21,14 @@ def _parse_gemini_error(exception: Exception) -> Tuple[str, str]:
         
     Returns:
         Tuple[str, str]: (tipo_erro, mensagem_amigavel)
-        tipos possíveis: 'api_key_invalid', 'api_key_expired', 'quota_exceeded', 'unknown'
+        tipos possíveis: 'api_key_invalid', 'api_key_expired', 'quota_exceeded', 
+                         'service_unavailable', 'unknown'
     """
     error_str = str(exception)
     error_lower = error_str.lower()
+    
+    if '503' in error_str or 'unavailable' in error_lower or 'overloaded' in error_lower:
+        return 'service_unavailable', 'O modelo do Gemini está sobrecarregado. Tente novamente em alguns instantes.'
     
     if 'api key expired' in error_lower or 'api_key_expired' in error_lower or 'expired' in error_lower:
         if 'api key' in error_lower or 'api_key' in error_lower:

@@ -4,7 +4,6 @@ Modelos de dados para o sistema de tickets GLPI.
 Este módulo contém os modelos principais:
 - GlpiCategory: Categorias GLPI para classificação de tickets
 - Ticket: Tickets recebidos do GLPI via webhook
-- Attachment: Anexos vinculados aos tickets
 - CategorySuggestion: Sugestões de categorias geradas pela IA para revisão manual
 - SatisfactionSurvey: Pesquisas de satisfação respondidas pelos usuários
 """
@@ -126,32 +125,6 @@ class Ticket(models.Model):
 
     def __str__(self):
         return f"Ticket GLPI #{self.id}"
-
-
-class Attachment(models.Model):
-    """
-    Anexo recebido do GLPI via webhook.
-    
-    Armazena arquivos binários vinculados a tickets, incluindo metadados
-    como nome, tipo MIME e tamanho.
-    """
-    
-    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='attachments')
-
-    name = models.CharField(max_length=255)
-    mime_type = models.CharField(max_length=100)
-    size = models.IntegerField()
-    data = models.BinaryField()
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['name']
-        verbose_name = 'Anexo GLPI'
-        verbose_name_plural = 'Anexos GLPI'
-
-    def __str__(self):
-        return self.name
 
 
 class CategorySuggestion(models.Model):
