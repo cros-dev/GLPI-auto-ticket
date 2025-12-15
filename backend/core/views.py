@@ -4,8 +4,8 @@ Views da API REST para gerenciamento de tickets e categorias GLPI.
 Este módulo contém todas as views que expõem endpoints da API:
 - Categorias: listagem e sincronização
 - Tickets: webhook, listagem, detalhe e classificação
-- Anexos: download de arquivos
 - Sugestões de categorias: listagem, prévia, aprovação e rejeição
+- Pesquisa de satisfação: endpoints públicos para avaliação
 """
 from rest_framework import generics, status
 from rest_framework.response import Response
@@ -371,9 +371,8 @@ class GlpiCategorySyncFromApiView(APIView):
         return processed_categories
     
 
-
 # =========================================================
-# 2. RECEBE WEBHOOK DO N8N (TICKET DO GLPI)
+# 2. RECEBE TICKET DO N8N, TRATA E SALVA NO BANCO (WEBHOOK)
 # =========================================================
 
 class GlpiWebhookView(APIView):
@@ -454,48 +453,7 @@ class TicketDetailView(generics.RetrieveUpdateAPIView):
 
 
 # =========================================================
-# 4. ENDPOINT PARA O N8N DEFINIR GLPI_ID
-# =========================================================
-
-class SetGlpiIdView(APIView):
-    """
-    Atualiza campos adicionais do ticket após criação/atualização no GLPI.
-    
-    Endpoint: PATCH /api/tickets/<id>/set-glpi-id/
-    Chamado pelo n8n após criar ou atualizar o ticket no GLPI.
-    O ID do ticket já é o mesmo do GLPI (primary key), então este endpoint
-    serve apenas para atualizar campos adicionais como status.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def patch(self, request, pk):
-        try:
-            ticket = Ticket.objects.get(pk=pk)
-        except Ticket.DoesNotExist:
-            return Response(
-                {"detail": "Ticket não encontrado"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        status_update = request.data.get("status")
-        glpi_updates = request.data.get("glpi_updates")
-
-        if status_update:
-            ticket.glpi_status = status_update
-
-        if glpi_updates:
-            pass
-
-        ticket.save()
-
-        return Response(
-            {"detail": "Ticket atualizado", "ticket": TicketSerializer(ticket).data},
-            status=status.HTTP_200_OK
-        )
-
-
-# =========================================================
-# 6. CLASSIFICAÇÃO DE TICKET
+# 4. CLASSIFICAÇÃO DE TICKET
 # =========================================================
 
 class TicketClassificationView(APIView):
@@ -534,8 +492,18 @@ class TicketClassificationView(APIView):
         )
         
         if isinstance(result, dict) and 'error' in result:
+            error_type = result.get('error', 'unknown')
+            error_message = result.get('message', 'Erro ao classificar ticket com Gemini AI.')
+            
+            # Erros temporários retornam 503, erros de configuração retornam 400
+            if error_type in ('service_unavailable', 'quota_exceeded'):
+                return Response(
+                    {"detail": error_message},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+            
             return Response(
-                {"detail": result.get('message', 'Erro ao classificar ticket com Gemini AI.')},
+                {"detail": error_message},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
