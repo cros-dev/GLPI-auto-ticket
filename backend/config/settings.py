@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     # Terceiros
     'rest_framework',
     'rest_framework.authtoken',
+    'corsheaders',
 
     # Apps locais
     'accounts',
@@ -66,6 +67,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # Deve estar antes de CommonMiddleware
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -221,6 +223,31 @@ LOGGING = {
         'level': 'INFO',
     },
 }
+
+
+# =========================================================
+# CORS (Para Frontend Angular)
+# =========================================================
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:4200",  # Angular dev server padrão
+]
+
+# Permitir credenciais (cookies, auth headers)
+CORS_ALLOW_CREDENTIALS = True
+
+# Headers permitidos
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 
 # =========================================================

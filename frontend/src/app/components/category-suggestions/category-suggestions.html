@@ -1,0 +1,60 @@
+<div class="container">
+  <div class="header">
+    <h1>Sugestões de Categorias</h1>
+    <button class="btn-logout" (click)="logout()">Sair</button>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading" class="loading">
+    <p>Carregando sugestões...</p>
+  </div>
+
+  <!-- Error -->
+  <div *ngIf="error && !loading" class="error">
+    <p>{{ error }}</p>
+    <button (click)="loadSuggestions()">Tentar novamente</button>
+  </div>
+
+  <!-- Empty State -->
+  <div *ngIf="!loading && !error && suggestions.length === 0" class="empty">
+    <p>Nenhuma sugestão pendente encontrada.</p>
+  </div>
+
+  <!-- Lista de Sugestões -->
+  <div *ngIf="!loading && !error && suggestions.length > 0" class="suggestions-list">
+    <div *ngFor="let suggestion of suggestions" class="suggestion-card">
+      <div class="suggestion-header">
+        <h2>{{ suggestion.suggested_path }}</h2>
+        <div class="badge" [class.pending]="suggestion.status === 'pending'">
+          {{ suggestion.status }}
+        </div>
+      </div>
+
+      <div class="suggestion-content">
+        <div class="ticket-info">
+          <p><strong>Ticket ID:</strong> #{{ suggestion.ticket_id }}</p>
+          <p><strong>Título:</strong> {{ suggestion.ticket_title }}</p>
+          <p><strong>Criado em:</strong> {{ formatDate(suggestion.created_at) }}</p>
+        </div>
+
+        <div class="ticket-content" *ngIf="suggestion.ticket_content">
+          <p><strong>Conteúdo do ticket:</strong></p>
+          <p class="content-text">{{ suggestion.ticket_content }}</p>
+        </div>
+      </div>
+
+      <div class="suggestion-actions">
+        <button 
+          class="btn-approve" 
+          (click)="approveSuggestion(suggestion.id)">
+          ✓ Aprovar
+        </button>
+        <button 
+          class="btn-reject" 
+          (click)="rejectSuggestion(suggestion.id)">
+          ✗ Rejeitar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
