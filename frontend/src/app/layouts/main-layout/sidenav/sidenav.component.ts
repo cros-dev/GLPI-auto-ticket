@@ -37,7 +37,19 @@ export class SidenavComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   /** Itens de menu exibidos no sidenav. */
-  menuItems: MenuItem[] = [
+  menuItems: MenuItem[] = [];
+
+  constructor(@Inject(PLATFORM_ID) private platformId: Object) {
+    this.initializeMenuItems();
+  }
+
+  /**
+   * Inicializa os itens do menu.
+   * 
+   * @private
+   */
+  private initializeMenuItems(): void {
+    this.menuItems = [
     {
       label: 'Início',
       icon: 'pi pi-home',
@@ -46,18 +58,29 @@ export class SidenavComponent implements OnInit, OnDestroy {
     {
       label: 'Sugestões de Categorias',
       icon: 'pi pi-tags',
-      routerLink: '/category-suggestions',
+        routerLink: ['/category-suggestions'],
       items: [
+          {
+            label: 'Dashboard',
+            icon: 'pi pi-chart-bar',
+            routerLink: ['/category-suggestions']
+          },
         {
           label: 'Pendentes',
           icon: 'pi pi-clock',
-          routerLink: '/category-suggestions'
+            routerLink: ['/category-suggestions'],
+            queryParams: { status: 'pending' }
+          },
+          {
+            label: 'Aprovadas',
+            icon: 'pi pi-check-circle',
+            routerLink: ['/category-suggestions'],
+            queryParams: { status: 'approved' }
         }
       ]
     }
   ];
-
-  constructor(@Inject(PLATFORM_ID) private platformId: Object) {}
+  }
 
   /**
    * Inicializa o componente configurando detecção de mobile e listener de resize.

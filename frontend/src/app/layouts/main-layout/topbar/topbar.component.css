@@ -2,7 +2,7 @@
   height: var(--topbar-height);
   padding: 0 var(--spacing-lg);
   border-bottom: 1px solid var(--border-color);
-  background: var(--color-white);
+  background: #ffffff;
   border-radius: 0;
 }
 
@@ -21,7 +21,7 @@
 .logo {
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--primary-color);
+  color: var(--p-primary-color, #6366f1);
 }
 
 .title {

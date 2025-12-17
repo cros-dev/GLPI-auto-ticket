@@ -17,6 +17,7 @@ from .views import (
     TicketDetailView,
     TicketClassificationView,
     CategorySuggestionListView,
+    CategorySuggestionStatsView,
     CategorySuggestionApproveView,
     CategorySuggestionRejectView,
     CategorySuggestionPreviewView
@@ -49,6 +50,7 @@ urlpatterns = [
     # 5. SUGESTÕES DE CATEGORIAS
     # =========================================================
     path('category-suggestions/', CategorySuggestionListView.as_view(), name='category-suggestion-list'),
+    path('category-suggestions/stats/', CategorySuggestionStatsView.as_view(), name='category-suggestion-stats'),
     path('category-suggestions/preview/', CategorySuggestionPreviewView.as_view(), name='category-suggestion-preview'),
     path('category-suggestions/<int:pk>/approve/', CategorySuggestionApproveView.as_view(), name='category-suggestion-approve'),
     path('category-suggestions/<int:pk>/reject/', CategorySuggestionRejectView.as_view(), name='category-suggestion-reject'),

@@ -26,7 +26,6 @@
     flex-shrink: 0;
     transition: width var(--transition);
     overflow: hidden;
-    background: white;
     border-right: 1px solid var(--border-color);
   }
 

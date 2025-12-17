@@ -27,10 +27,32 @@ h1 {
   border-bottom: 1px solid var(--border-color-subtle);
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+}
+
 .suggestion-header h2 {
   margin: 0;
   color: var(--text-color);
   font-size: 1.25rem;
+  flex: 1;
+}
+
+.badge-id {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--p-primary-color, #6366f1);
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .badge {
@@ -42,8 +64,18 @@ h1 {
 }
 
 .badge.pending {
-  background-color: var(--color-warning);
-  color: var(--color-black);
+  background: var(--p-warning-color, #f59e0b);
+  color: #000000;
+}
+
+.badge.approved {
+  background: var(--p-success-color, #10b981);
+  color: #ffffff;
+}
+
+.badge.rejected {
+  background: var(--p-danger-color, #ef4444);
+  color: #ffffff;
 }
 
 .ticket-info {
@@ -76,6 +108,29 @@ h1 {
   color: var(--text-color-tertiary);
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+.content-clickable {
+  cursor: pointer;
+  transition: color var(--transition);
+  max-height: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+}
+
+.content-clickable:hover {
+  color: var(--p-primary-color, #6366f1);
+  text-decoration: underline;
+}
+
+.content-clickable::after {
+  content: '... (clique para ver mais)';
+  display: block;
+  margin-top: var(--spacing-xs);
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--p-primary-color, #6366f1);
 }
 
 .suggestion-actions {

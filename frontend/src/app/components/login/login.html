@@ -30,14 +30,14 @@
         />
       </div>
 
-      <button
+      <p-button
         type="submit"
-        class="btn btn-primary btn-full btn-login"
+        label="{{ loading ? 'Entrando...' : 'Entrar' }}"
         [disabled]="loading || !username || !password"
-      >
-        <span *ngIf="!loading">Entrar</span>
-        <span *ngIf="loading">Entrando...</span>
-      </button>
+        [loading]="loading"
+        [style]="{ width: '100%' }"
+        class="btn-login">
+      </p-button>
     </form>
   </div>
 </div>

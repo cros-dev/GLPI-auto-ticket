@@ -16,7 +16,8 @@ export const routes: Routes = [
     children: [
       {
         path: '',
-        component: CategorySuggestions
+        redirectTo: '/category-suggestions',
+        pathMatch: 'full'
       },
       {
         path: 'category-suggestions',

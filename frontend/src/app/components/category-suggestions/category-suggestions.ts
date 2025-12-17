@@ -1,10 +1,21 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Subject } from 'rxjs';
+import { takeUntil, distinctUntilChanged } from 'rxjs/operators';
+import { ButtonModule } from 'primeng/button';
 import { ApiService } from '../../services/api.service';
 import { NotificationService } from '../../services/notification.service';
+import { CacheService } from '../../services/cache.service';
 import { CategorySuggestion } from '../../models/category-suggestion.interface';
 import { formatDate } from '../../utils/date.utils';
 import { getHttpErrorInfo } from '../../utils/error-handler.utils';
+import { decodeHtmlEntities } from '../../utils/html.utils';
+import { translateCategorySuggestionStatus } from '../../utils/status.utils';
+import { BreadcrumbComponent, BreadcrumbItem } from '../breadcrumb/breadcrumb';
+import { CategorySuggestionsDashboard } from '../category-suggestions-dashboard/category-suggestions-dashboard';
+import { LoadingComponent } from '../loading/loading.component';
+import { ContentDialogComponent } from '../content-dialog/content-dialog.component';
 
 /**
  * Componente para visualização e aprovação/rejeição de sugestões de categorias.
@@ -14,11 +25,11 @@ import { getHttpErrorInfo } from '../../utils/error-handler.utils';
  */
 @Component({
   selector: 'app-category-suggestions',
-  imports: [CommonModule],
+  imports: [CommonModule, ButtonModule, BreadcrumbComponent, CategorySuggestionsDashboard, LoadingComponent, ContentDialogComponent],
   templateUrl: './category-suggestions.html',
   styleUrl: './category-suggestions.css',
 })
-export class CategorySuggestions implements OnInit {
+export class CategorySuggestions implements OnInit, OnDestroy {
   /** Lista de sugestões de categorias carregadas. */
   suggestions: CategorySuggestion[] = [];
   
@@ -28,29 +39,148 @@ export class CategorySuggestions implements OnInit {
   /** Mensagem de erro, se houver. */
   error: string | null = null;
 
+  /** Status atual para filtrar as sugestões. */
+  currentStatus: 'pending' | 'approved' | 'rejected' = 'pending';
+
+  /** Indica se deve exibir o dashboard (quando não há query params de status). */
+  showDashboard = false;
+
+  /** Controla a visibilidade do dialog de conteúdo. */
+  showContentDialog = false;
+
+  /** Conteúdo atual a ser exibido no dialog. */
+  dialogContent: string = '';
+
+  /** Título atual do dialog. */
+  dialogTitle: string = 'Conteúdo do Ticket';
+
+  /** Subject para gerenciar unsubscribe. */
+  private destroy$ = new Subject<void>();
+
+  /** Prefixo usado para as chaves de cache. */
+  private readonly cachePrefix = 'category-suggestions';
+
+  /** Indica se está visualizando sugestões aprovadas (sem ações de aprovar/rejeitar). */
+  get isApprovedView(): boolean {
+    return this.currentStatus === 'approved';
+  }
+
+  /** Título da página baseado no status. */
+  get pageTitle(): string {
+    if (this.currentStatus === 'approved') {
+      return 'Sugestões Aprovadas';
+    } else if (this.currentStatus === 'rejected') {
+      return 'Sugestões Rejeitadas';
+    }
+    return 'Sugestões de Categorias';
+  }
+
+  /** Label do breadcrumb baseado no status. */
+  get breadcrumbLabel(): string {
+    if (this.currentStatus === 'approved') {
+      return 'Aprovadas';
+    } else if (this.currentStatus === 'rejected') {
+      return 'Rejeitadas';
+    }
+    return 'Pendentes';
+  }
+
+  /** Itens do breadcrumb. */
+  get breadcrumbItems(): BreadcrumbItem[] {
+    return [
+      { label: 'Início', route: '/' },
+      { label: 'Sugestões de Categorias', route: '/category-suggestions' },
+      { label: this.breadcrumbLabel }
+    ];
+  }
+
   constructor(
     private apiService: ApiService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private cacheService: CacheService,
+    private route: ActivatedRoute,
+    private router: Router,
+    private cdr: ChangeDetectorRef
   ) {}
 
   /**
-   * Inicializa o componente carregando as sugestões pendentes.
+   * Inicializa o componente verificando o status da rota e carregando as sugestões.
    */
   ngOnInit(): void {
-    this.loadSuggestions();
+    // Inicializa baseado na rota atual de forma síncrona
+    const status = this.route.snapshot.queryParams['status'] as 'pending' | 'approved' | 'rejected' | undefined;
+    
+    if (!status) {
+      // Se não há status, mostra dashboard
+      this.showDashboard = true;
+    } else {
+      // Se há status, mostra lista
+      this.showDashboard = false;
+      this.currentStatus = status;
+      this.loadSuggestions();
+    }
+    
+    // Se inscreve para mudanças futuras nos query params
+    this.route.queryParams.pipe(
+      distinctUntilChanged(),
+      takeUntil(this.destroy$)
+    ).subscribe(params => {
+      const newStatus = params['status'] as 'pending' | 'approved' | 'rejected' | undefined;
+      
+      if (!newStatus) {
+        // Se não há status, mostra dashboard
+        this.showDashboard = true;
+        this.currentStatus = 'pending'; // Reset para o padrão
+      } else {
+        // Se há status, mostra lista
+        this.showDashboard = false;
+        this.currentStatus = newStatus;
+        this.loadSuggestions();
+      }
+    });
   }
 
   /**
-   * Carrega a lista de sugestões de categorias pendentes da API.
+   * Limpa recursos ao destruir o componente.
    */
-  loadSuggestions(): void {
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  /**
+   * Carrega a lista de sugestões de categorias da API conforme o status atual.
+   * Utiliza cache para evitar requisições desnecessárias.
+   * 
+   * @param forceRefresh - Se true, força uma nova requisição mesmo que exista cache
+   */
+  loadSuggestions(forceRefresh: boolean = false): void {
+    const cacheKey = `${this.cachePrefix}-${this.currentStatus}`;
+    
+    // Verifica se existe no cache e não está forçando refresh
+    if (!forceRefresh) {
+      const cached = this.cacheService.get<CategorySuggestion[]>(cacheKey);
+      if (cached) {
+        this.suggestions = cached;
+        this.loading = false;
+        this.error = null;
+        this.cdr.markForCheck();
+        return;
+      }
+    }
+
     this.loading = true;
     this.error = null;
 
-    this.apiService.getCategorySuggestions('pending').subscribe({
+    this.apiService.getCategorySuggestions(this.currentStatus).pipe(
+      takeUntil(this.destroy$)
+    ).subscribe({
       next: (data) => {
+        // Armazena no cache (sem TTL, cache manual via delete)
+        this.cacheService.set(cacheKey, data);
         this.suggestions = data;
         this.loading = false;
+        this.cdr.markForCheck();
       },
       error: (err) => {
         this.loading = false;
@@ -58,6 +188,7 @@ export class CategorySuggestions implements OnInit {
         this.error = errorInfo.message;
         this.notificationService.showError(errorInfo.message, 'Erro');
         console.error('Erro ao carregar sugestões:', err);
+        this.cdr.markForCheck();
       }
     });
   }
@@ -68,9 +199,14 @@ export class CategorySuggestions implements OnInit {
    * @param id - ID da sugestão a ser aprovada
    */
   approveSuggestion(id: number): void {
-    this.apiService.approveCategorySuggestion(id).subscribe({
+    this.apiService.approveCategorySuggestion(id).pipe(
+      takeUntil(this.destroy$)
+    ).subscribe({
       next: () => {
         this.suggestions = this.suggestions.filter(s => s.id !== id);
+        // Limpa o cache de pendentes e estatísticas para recarregar na próxima vez
+        this.cacheService.delete(`${this.cachePrefix}-pending`);
+        this.cacheService.delete('category-suggestions-stats');
         this.notificationService.showSuccess('Sugestão aprovada com sucesso!');
       },
       error: (err) => {
@@ -91,9 +227,14 @@ export class CategorySuggestions implements OnInit {
       return;
     }
 
-    this.apiService.rejectCategorySuggestion(id).subscribe({
+    this.apiService.rejectCategorySuggestion(id).pipe(
+      takeUntil(this.destroy$)
+    ).subscribe({
       next: () => {
         this.suggestions = this.suggestions.filter(s => s.id !== id);
+        // Limpa o cache de pendentes e estatísticas para recarregar na próxima vez
+        this.cacheService.delete(`${this.cachePrefix}-pending`);
+        this.cacheService.delete('category-suggestions-stats');
         this.notificationService.showSuccess('Sugestão rejeitada com sucesso!');
       },
       error: (err) => {
@@ -112,5 +253,40 @@ export class CategorySuggestions implements OnInit {
    */
   formatDate(dateString: string | null): string {
     return formatDate(dateString);
+  }
+
+  /**
+   * Decodifica entidades HTML escapadas para exibição como texto normal.
+   * 
+   * @param html - String com entidades HTML escapadas ou null
+   * @returns String com caracteres decodificados
+   */
+  decodeHtml(html: string | null | undefined): string {
+    return decodeHtmlEntities(html);
+  }
+
+  /**
+   * Traduz o status da sugestão para português.
+   * 
+   * @param status - Status em inglês (pending, approved, rejected)
+   * @returns Status traduzido para português
+   */
+  translateStatus(status: 'pending' | 'approved' | 'rejected'): string {
+    return translateCategorySuggestionStatus(status);
+  }
+
+  /**
+   * Abre o dialog para exibir o conteúdo do ticket.
+   * 
+   * @param title - Título do ticket
+   * @param content - Conteúdo do ticket
+   */
+  openContentDialog(title: string, content: string | null | undefined): void {
+    if (!content) {
+      return;
+    }
+    this.dialogTitle = `Conteúdo: ${decodeHtmlEntities(title)}`;
+    this.dialogContent = decodeHtmlEntities(content);
+    this.showContentDialog = true;
   }
 }

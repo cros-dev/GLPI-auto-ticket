@@ -1,59 +1,106 @@
-<div class="container">
-  <div class="header">
-    <h1>Sugestões de Categorias</h1>
-  </div>
-
-  <!-- Loading -->
-  <div *ngIf="loading" class="loading">
-    <p>Carregando sugestões...</p>
-  </div>
-
-  <!-- Error -->
-  <div *ngIf="error && !loading" class="error">
-    <p>{{ error }}</p>
-    <button (click)="loadSuggestions()">Tentar novamente</button>
-  </div>
-
-  <!-- Empty State -->
-  <div *ngIf="!loading && !error && suggestions.length === 0" class="empty">
-    <p>Nenhuma sugestão pendente encontrada.</p>
-  </div>
-
-  <!-- Lista de Sugestões -->
-  <div *ngIf="!loading && !error && suggestions.length > 0" class="suggestions-list">
-    <div *ngFor="let suggestion of suggestions" class="card suggestion-card">
-      <div class="suggestion-header">
-        <h2>{{ suggestion.suggested_path }}</h2>
-        <div class="badge" [class.pending]="suggestion.status === 'pending'">
-          {{ suggestion.status }}
-        </div>
-      </div>
-
-      <div class="suggestion-content">
-        <div class="ticket-info">
-          <p><strong>Ticket ID:</strong> #{{ suggestion.ticket_id }}</p>
-          <p><strong>Título:</strong> {{ suggestion.ticket_title }}</p>
-          <p><strong>Criado em:</strong> {{ formatDate(suggestion.created_at) }}</p>
-        </div>
-
-        <div class="ticket-content" *ngIf="suggestion.ticket_content">
-          <p><strong>Conteúdo do ticket:</strong></p>
-          <p class="content-text">{{ suggestion.ticket_content }}</p>
-        </div>
-      </div>
-
-      <div class="suggestion-actions">
-        <button 
-          class="btn btn-success btn-approve" 
-          (click)="approveSuggestion(suggestion.id)">
-          ✓ Aprovar
-        </button>
-        <button 
-          class="btn btn-danger btn-reject" 
-          (click)="rejectSuggestion(suggestion.id)">
-          ✗ Rejeitar
-        </button>
-      </div>
+@if (showDashboard) {
+  <!-- Dashboard (quando não há query params) -->
+  <app-category-suggestions-dashboard></app-category-suggestions-dashboard>
+} @else {
+  <!-- Lista (quando há query params de status) -->
+  <div class="container">
+    <app-breadcrumb [items]="breadcrumbItems"></app-breadcrumb>
+    
+    <div class="header">
+      <h1>{{ pageTitle }}</h1>
     </div>
+
+    <app-loading [loading]="loading" message="Carregando sugestões..."></app-loading>
+
+    @if (!loading && error) {
+      <!-- Error -->
+      <div class="error">
+        <p>{{ error }}</p>
+        <button (click)="loadSuggestions()">Tentar novamente</button>
+      </div>
+    }
+
+    @if (!loading && !error && suggestions.length === 0) {
+      <!-- Empty State -->
+      <div class="empty">
+        @if (currentStatus === 'pending') {
+          <p>Nenhuma sugestão pendente encontrada.</p>
+        }
+        @if (currentStatus === 'approved') {
+          <p>Nenhuma sugestão aprovada encontrada.</p>
+        }
+        @if (currentStatus === 'rejected') {
+          <p>Nenhuma sugestão rejeitada encontrada.</p>
+        }
+      </div>
+    }
+
+    @if (!loading && !error && suggestions.length > 0) {
+      <!-- Lista de Sugestões -->
+      <div class="suggestions-list">
+        @for (suggestion of suggestions; track suggestion.id) {
+          <div class="card suggestion-card">
+            <div class="suggestion-header">
+              <div class="header-left">
+                <div class="badge-id">{{ suggestion.id }}</div>
+                <h2>{{ suggestion.suggested_path }}</h2>
+              </div>
+              <div class="badge" 
+                   [class.pending]="suggestion.status === 'pending'"
+                   [class.approved]="suggestion.status === 'approved'"
+                   [class.rejected]="suggestion.status === 'rejected'">
+                {{ translateStatus(suggestion.status) }}
+              </div>
+            </div>
+
+            <div class="suggestion-content">
+              <div class="ticket-info">
+                <p><strong>Ticket ID:</strong> #{{ suggestion.ticket_id }}</p>
+                <p><strong>Título:</strong> {{ decodeHtml(suggestion.ticket_title) }}</p>
+                <p><strong>Criado em:</strong> {{ formatDate(suggestion.created_at) }}</p>
+              </div>
+
+              @if (suggestion.ticket_content) {
+                <div class="ticket-content">
+                  <p><strong>Conteúdo do ticket:</strong></p>
+                  <p 
+                    class="content-text content-clickable" 
+                    (click)="openContentDialog(suggestion.ticket_title, suggestion.ticket_content)"
+                    title="Clique para ver o conteúdo completo">
+                    {{ decodeHtml(suggestion.ticket_content) }}
+                  </p>
+                </div>
+              }
+            </div>
+
+            @if (!isApprovedView) {
+              <div class="suggestion-actions">
+                <p-button 
+                  label="Aprovar"
+                  icon="pi pi-check"
+                  severity="success"
+                  (onClick)="approveSuggestion(suggestion.id)"
+                  class="btn-approve">
+                </p-button>
+                <p-button 
+                  label="Rejeitar"
+                  icon="pi pi-times"
+                  severity="danger"
+                  (onClick)="rejectSuggestion(suggestion.id)"
+                  class="btn-reject">
+                </p-button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
   </div>
-</div>
+
+  <!-- Dialog para exibir conteúdo do ticket -->
+  <app-content-dialog
+    [(visible)]="showContentDialog"
+    [title]="dialogTitle"
+    [content]="dialogContent">
+  </app-content-dialog>
+}

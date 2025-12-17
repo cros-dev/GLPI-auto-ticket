@@ -599,7 +599,7 @@ class CategorySuggestionListView(generics.ListAPIView):
                 'suggested_path': suggestion.suggested_path,
                 'ticket_id': suggestion.ticket.id,
                 'ticket_title': suggestion.ticket_title,
-                'ticket_content': suggestion.ticket_content[:500] if suggestion.ticket_content else '',
+                'ticket_content': suggestion.ticket_content if suggestion.ticket_content else '',
                 'status': suggestion.status,
                 'created_at': suggestion.created_at,
                 'reviewed_at': suggestion.reviewed_at,
@@ -607,6 +607,28 @@ class CategorySuggestionListView(generics.ListAPIView):
                 'notes': suggestion.notes
             })
         return Response(data, status=status.HTTP_200_OK)
+
+
+class CategorySuggestionStatsView(APIView):
+    """
+    Retorna estatísticas agregadas das sugestões de categorias.
+    
+    Endpoint: GET /api/category-suggestions/stats/
+    Requer autenticação por token.
+    
+    Retorna contagem de sugestões por status (total, pending, approved, rejected).
+    Útil para exibir dashboard com estatísticas resumidas.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        stats = {
+            'total': CategorySuggestion.objects.count(),
+            'pending': CategorySuggestion.objects.filter(status='pending').count(),
+            'approved': CategorySuggestion.objects.filter(status='approved').count(),
+            'rejected': CategorySuggestion.objects.filter(status='rejected').count()
+        }
+        return Response(stats, status=status.HTTP_200_OK)
 
 
 class CategorySuggestionApproveView(APIView):

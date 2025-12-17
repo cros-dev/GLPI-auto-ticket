@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { CategorySuggestion } from '../models/category-suggestion.interface';
+import { CategorySuggestionStats } from '../models/category-suggestion-stats.interface';
 
 /**
  * Serviço para comunicação com a API REST do backend.
@@ -66,6 +67,24 @@ export class ApiService {
     const url = `${this.apiUrl}/category-suggestions/${id}/reject/`;
     const body = notes ? { notes } : {};
     return this.http.post(url, body);
+  }
+
+  /**
+   * Obtém estatísticas agregadas das sugestões de categorias.
+   * 
+   * @returns Observable com estatísticas (total, pending, approved, rejected)
+   * 
+   * @example
+   * ```typescript
+   * this.apiService.getCategorySuggestionStats().subscribe(stats => {
+   *   console.log('Total:', stats.total);
+   *   console.log('Pendentes:', stats.pending);
+   * });
+   * ```
+   */
+  getCategorySuggestionStats(): Observable<CategorySuggestionStats> {
+    const url = `${this.apiUrl}/category-suggestions/stats/`;
+    return this.http.get<CategorySuggestionStats>(url);
   }
 }
 

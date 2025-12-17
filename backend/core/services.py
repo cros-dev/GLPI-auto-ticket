@@ -366,7 +366,7 @@ def save_category_suggestion(
         if existing:
             existing.suggested_path = suggested_path
             existing.ticket_title = title
-            existing.ticket_content = content[:5000]
+            existing.ticket_content = content
             existing.save()
             return existing
         
@@ -374,7 +374,7 @@ def save_category_suggestion(
             ticket=ticket,
             suggested_path=suggested_path,
             ticket_title=title,
-            ticket_content=content[:5000],
+            ticket_content=content,
             status='pending'
         )
         return suggestion

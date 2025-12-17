@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { ButtonModule } from 'primeng/button';
 import { AuthService } from '../../services/auth.service';
 import { NotificationService } from '../../services/notification.service';
 import { getHttpErrorInfo, HttpErrorType } from '../../utils/error-handler.utils';
@@ -14,7 +15,7 @@ import { getHttpErrorInfo, HttpErrorType } from '../../utils/error-handler.utils
  */
 @Component({
   selector: 'app-login',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ButtonModule],
   templateUrl: './login.html',
   styleUrl: './login.css',
 })

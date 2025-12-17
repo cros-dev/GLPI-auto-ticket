@@ -1,0 +1,9 @@
+.dialog-content {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--text-color);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin: 0;
+  padding: 0;
+}
