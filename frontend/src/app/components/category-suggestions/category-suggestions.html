@@ -1,7 +1,6 @@
 <div class="container">
   <div class="header">
     <h1>Sugestões de Categorias</h1>
-    <button class="btn-logout" (click)="logout()">Sair</button>
   </div>
 
   <!-- Loading -->
@@ -22,7 +21,7 @@
 
   <!-- Lista de Sugestões -->
   <div *ngIf="!loading && !error && suggestions.length > 0" class="suggestions-list">
-    <div *ngFor="let suggestion of suggestions" class="suggestion-card">
+    <div *ngFor="let suggestion of suggestions" class="card suggestion-card">
       <div class="suggestion-header">
         <h2>{{ suggestion.suggested_path }}</h2>
         <div class="badge" [class.pending]="suggestion.status === 'pending'">
@@ -45,12 +44,12 @@
 
       <div class="suggestion-actions">
         <button 
-          class="btn-approve" 
+          class="btn btn-success btn-approve" 
           (click)="approveSuggestion(suggestion.id)">
           ✓ Aprovar
         </button>
         <button 
-          class="btn-reject" 
+          class="btn btn-danger btn-reject" 
           (click)="rejectSuggestion(suggestion.id)">
           ✗ Rejeitar
         </button>

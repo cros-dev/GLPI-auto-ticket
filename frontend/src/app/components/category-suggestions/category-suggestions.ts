@@ -1,11 +1,17 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
-import { AuthService } from '../../services/auth.service';
 import { NotificationService } from '../../services/notification.service';
 import { CategorySuggestion } from '../../models/category-suggestion.interface';
+import { formatDate } from '../../utils/date.utils';
+import { getHttpErrorInfo } from '../../utils/error-handler.utils';
 
+/**
+ * Componente para visualização e aprovação/rejeição de sugestões de categorias.
+ * 
+ * Exibe uma lista de sugestões de categorias pendentes, permitindo ao usuário
+ * aprovar ou rejeitar cada sugestão individualmente.
+ */
 @Component({
   selector: 'app-category-suggestions',
   imports: [CommonModule],
@@ -13,21 +19,30 @@ import { CategorySuggestion } from '../../models/category-suggestion.interface';
   styleUrl: './category-suggestions.css',
 })
 export class CategorySuggestions implements OnInit {
+  /** Lista de sugestões de categorias carregadas. */
   suggestions: CategorySuggestion[] = [];
+  
+  /** Indica se está carregando dados. */
   loading = false;
+  
+  /** Mensagem de erro, se houver. */
   error: string | null = null;
 
   constructor(
     private apiService: ApiService,
-    private authService: AuthService,
-    private router: Router,
     private notificationService: NotificationService
   ) {}
 
+  /**
+   * Inicializa o componente carregando as sugestões pendentes.
+   */
   ngOnInit(): void {
     this.loadSuggestions();
   }
 
+  /**
+   * Carrega a lista de sugestões de categorias pendentes da API.
+   */
   loadSuggestions(): void {
     this.loading = true;
     this.error = null;
@@ -39,61 +54,63 @@ export class CategorySuggestions implements OnInit {
       },
       error: (err) => {
         this.loading = false;
-        if (!err.status || err.status === 0) {
-          this.error = 'Não foi possível conectar ao servidor. Verifique se o backend está rodando.';
-          this.notificationService.showError(
-            'Não foi possível conectar ao servidor. Verifique se o backend está rodando.',
-            'Erro de Conexão'
-          );
-        } else {
-          this.error = 'Erro ao carregar sugestões.';
-          this.notificationService.showError('Erro ao carregar sugestões.', 'Erro');
-        }
+        const errorInfo = getHttpErrorInfo(err);
+        this.error = errorInfo.message;
+        this.notificationService.showError(errorInfo.message, 'Erro');
         console.error('Erro ao carregar sugestões:', err);
       }
     });
   }
 
+  /**
+   * Aprova uma sugestão de categoria.
+   * 
+   * @param id - ID da sugestão a ser aprovada
+   */
   approveSuggestion(id: number): void {
     this.apiService.approveCategorySuggestion(id).subscribe({
       next: () => {
-        // Remove a sugestão da lista após aprovar
         this.suggestions = this.suggestions.filter(s => s.id !== id);
         this.notificationService.showSuccess('Sugestão aprovada com sucesso!');
       },
       error: (err) => {
-        this.notificationService.showError('Erro ao aprovar sugestão. Tente novamente.', 'Erro');
+        const errorInfo = getHttpErrorInfo(err);
+        this.notificationService.showError(errorInfo.message, 'Erro');
         console.error('Erro ao aprovar:', err);
       }
     });
   }
 
+  /**
+   * Rejeita uma sugestão de categoria após confirmação do usuário.
+   * 
+   * @param id - ID da sugestão a ser rejeitada
+   */
   rejectSuggestion(id: number): void {
-    // Usar confirm nativo por enquanto, pode ser substituído por Dialog do PrimeNG depois
     if (!confirm('Tem certeza que deseja rejeitar esta sugestão?')) {
       return;
     }
 
     this.apiService.rejectCategorySuggestion(id).subscribe({
       next: () => {
-        // Remove a sugestão da lista após rejeitar
         this.suggestions = this.suggestions.filter(s => s.id !== id);
         this.notificationService.showSuccess('Sugestão rejeitada com sucesso!');
       },
       error: (err) => {
-        this.notificationService.showError('Erro ao rejeitar sugestão. Tente novamente.', 'Erro');
+        const errorInfo = getHttpErrorInfo(err);
+        this.notificationService.showError(errorInfo.message, 'Erro');
         console.error('Erro ao rejeitar:', err);
       }
     });
   }
 
+  /**
+   * Formata uma data para exibição no formato brasileiro.
+   * 
+   * @param dateString - String de data no formato ISO ou null
+   * @returns Data formatada ou "-" se inválida
+   */
   formatDate(dateString: string | null): string {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleString('pt-BR');
-  }
-
-  logout(): void {
-    this.authService.logout();
-    this.router.navigate(['/login']);
+    return formatDate(dateString);
   }
 }

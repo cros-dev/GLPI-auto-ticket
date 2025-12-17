@@ -1,0 +1,57 @@
+
+.sidenav-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-width);
+}
+
+.sidenav-header {
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sidenav-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+:host ::ng-deep .sidenav-menu {
+  flex: 1;
+  border: none;
+  width: 100%;
+}
+
+:host ::ng-deep .sidenav-menu .p-panelmenu-panel {
+  border: none;
+  margin-bottom: 0;
+}
+
+:host ::ng-deep .sidenav-menu .p-panelmenu-header {
+  border: none;
+  border-radius: 0;
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+:host ::ng-deep .sidenav-menu .p-panelmenu-header-link {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+:host ::ng-deep .sidenav-menu .p-panelmenu-content {
+  border: none;
+  padding: 0;
+}
+
+:host ::ng-deep .sidenav-menu .p-menuitem-link {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: 0;
+}
+
+:host ::ng-deep .sidenav-menu .p-menuitem-link:hover {
+  background: var(--bg-color);
+}
+

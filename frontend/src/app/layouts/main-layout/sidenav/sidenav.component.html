@@ -1,0 +1,35 @@
+@if (isMobile) {
+  <!-- Mobile: drawer overlay -->
+  <p-drawer 
+    [(visible)]="visible"
+    position="left"
+    [modal]="true"
+    [showCloseIcon]="false"
+    styleClass="sidenav-drawer"
+    (onHide)="onHide()">
+    
+    <div class="sidenav-content">
+      <div class="sidenav-header">
+        <h2>Menu</h2>
+      </div>
+      
+      <p-panelmenu 
+        [model]="menuItems"
+        styleClass="sidenav-menu">
+      </p-panelmenu>
+    </div>
+  </p-drawer>
+} @else {
+  <!-- Desktop: sidenav no layout -->
+  <div class="sidenav-content">
+    <div class="sidenav-header">
+      <h2>Menu</h2>
+    </div>
+    
+    <p-panelmenu 
+      [model]="menuItems"
+      styleClass="sidenav-menu">
+    </p-panelmenu>
+  </div>
+}
+

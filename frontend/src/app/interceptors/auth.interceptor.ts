@@ -3,6 +3,10 @@
  * 
  * Adiciona o token de autenticação em todas as requisições para a API
  * e trata erros 401 (não autorizado) fazendo logout automático.
+ * 
+ * @param req - Requisição HTTP interceptada
+ * @param next - Handler para continuar o fluxo da requisição
+ * @returns Observable com a resposta da requisição ou erro
  */
 import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
 import { inject } from '@angular/core';

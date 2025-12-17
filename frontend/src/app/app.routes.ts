@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { CategorySuggestions } from './components/category-suggestions/category-suggestions';
 import { Login } from './components/login/login';
+import { MainLayoutComponent } from './layouts/main-layout/main-layout.component';
 import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
@@ -10,7 +11,17 @@ export const routes: Routes = [
   },
   {
     path: '',
-    component: CategorySuggestions,
-    canActivate: [authGuard]
+    component: MainLayoutComponent,
+    canActivate: [authGuard],
+    children: [
+      {
+        path: '',
+        component: CategorySuggestions
+      },
+      {
+        path: 'category-suggestions',
+        component: CategorySuggestions
+      }
+    ]
   }
 ];

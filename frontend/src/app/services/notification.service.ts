@@ -1,6 +1,13 @@
 import { Injectable } from '@angular/core';
 import { MessageService } from 'primeng/api';
 
+/**
+ * Serviço de notificações da aplicação.
+ * 
+ * Fornece métodos para exibir notificações toast (sucesso, erro, aviso, info)
+ * utilizando o MessageService do PrimeNG. Todas as mensagens são exibidas
+ * através do componente p-toast configurado globalmente.
+ */
 @Injectable({
   providedIn: 'root'
 })
@@ -8,7 +15,10 @@ export class NotificationService {
   constructor(private messageService: MessageService) {}
 
   /**
-   * Mostra mensagem de sucesso
+   * Exibe uma mensagem de sucesso.
+   * 
+   * @param message - Texto da mensagem a ser exibida
+   * @param title - Título da notificação (padrão: "Sucesso")
    */
   showSuccess(message: string, title: string = 'Sucesso'): void {
     this.messageService.add({
@@ -20,7 +30,10 @@ export class NotificationService {
   }
 
   /**
-   * Mostra mensagem de erro
+   * Exibe uma mensagem de erro.
+   * 
+   * @param message - Texto da mensagem de erro a ser exibida
+   * @param title - Título da notificação (padrão: "Erro")
    */
   showError(message: string, title: string = 'Erro'): void {
     this.messageService.add({
@@ -32,7 +45,10 @@ export class NotificationService {
   }
 
   /**
-   * Mostra mensagem de aviso
+   * Exibe uma mensagem de aviso.
+   * 
+   * @param message - Texto da mensagem de aviso a ser exibida
+   * @param title - Título da notificação (padrão: "Atenção")
    */
   showWarning(message: string, title: string = 'Atenção'): void {
     this.messageService.add({
@@ -44,7 +60,10 @@ export class NotificationService {
   }
 
   /**
-   * Mostra mensagem informativa
+   * Exibe uma mensagem informativa.
+   * 
+   * @param message - Texto da mensagem informativa a ser exibida
+   * @param title - Título da notificação (padrão: "Informação")
    */
   showInfo(message: string, title: string = 'Informação'): void {
     this.messageService.add({

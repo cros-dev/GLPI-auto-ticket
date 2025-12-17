@@ -1,5 +1,5 @@
 <div class="login-container">
-  <div class="login-card">
+  <div class="card login-card">
     <h1>Sugestões de Categorias</h1>
     <p class="subtitle">Faça login para continuar</p>
 
@@ -32,7 +32,7 @@
 
       <button
         type="submit"
-        class="btn-login"
+        class="btn btn-primary btn-full btn-login"
         [disabled]="loading || !username || !password"
       >
         <span *ngIf="!loading">Entrar</span>
