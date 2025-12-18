@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
+import { ConfirmationService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil, distinctUntilChanged } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
@@ -98,6 +99,7 @@ export class CategorySuggestions implements OnInit, OnDestroy {
     private apiService: ApiService,
     private notificationService: NotificationService,
     private cacheService: CacheService,
+    private confirmationService: ConfirmationService,
     private route: ActivatedRoute,
     private router: Router,
     private cdr: ChangeDetectorRef
@@ -223,24 +225,29 @@ export class CategorySuggestions implements OnInit, OnDestroy {
    * @param id - ID da sugestão a ser rejeitada
    */
   rejectSuggestion(id: number): void {
-    if (!confirm('Tem certeza que deseja rejeitar esta sugestão?')) {
-      return;
-    }
-
-    this.apiService.rejectCategorySuggestion(id).pipe(
-      takeUntil(this.destroy$)
-    ).subscribe({
-      next: () => {
-        this.suggestions = this.suggestions.filter(s => s.id !== id);
-        // Limpa o cache de pendentes e estatísticas para recarregar na próxima vez
-        this.cacheService.delete(`${this.cachePrefix}-pending`);
-        this.cacheService.delete('category-suggestions-stats');
-        this.notificationService.showSuccess('Sugestão rejeitada com sucesso!');
-      },
-      error: (err) => {
-        const errorInfo = getHttpErrorInfo(err);
-        this.notificationService.showError(errorInfo.message, 'Erro');
-        console.error('Erro ao rejeitar:', err);
+    this.confirmationService.confirm({
+      message: 'Tem certeza que deseja rejeitar esta sugestão?',
+      header: 'Confirmar Rejeição',
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Sim',
+      rejectLabel: 'Não',
+      accept: () => {
+        this.apiService.rejectCategorySuggestion(id).pipe(
+          takeUntil(this.destroy$)
+        ).subscribe({
+          next: () => {
+            this.suggestions = this.suggestions.filter(s => s.id !== id);
+            // Limpa o cache de pendentes e estatísticas para recarregar na próxima vez
+            this.cacheService.delete(`${this.cachePrefix}-pending`);
+            this.cacheService.delete('category-suggestions-stats');
+            this.notificationService.showSuccess('Sugestão rejeitada com sucesso!');
+          },
+          error: (err) => {
+            const errorInfo = getHttpErrorInfo(err);
+            this.notificationService.showError(errorInfo.message, 'Erro');
+            console.error('Erro ao rejeitar:', err);
+          }
+        });
       }
     });
   }

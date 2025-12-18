@@ -170,6 +170,50 @@ Resposta:
 - `POST /api/category-suggestions/<id>/reject/`
   - Rejeita uma sugestão de categoria pendente.
 
+### Integração opcional: aprovação/rejeição via n8n
+
+Para usar os endpoints de **aprovação/rejeição** com criação/atualização no GLPI, configure:
+
+```bash
+N8N_CATEGORY_APPROVAL_WEBHOOK_URL=http://seu-n8n/webhook/glpi/category-approval
+```
+
+Comportamento:
+
+- O endpoint **só confirma** a aprovação/rejeição após o n8n responder **2xx**.
+- Se o webhook falhar, a sugestão **permanece pendente** e o endpoint retorna **502**.
+
+Payload enviado (exemplo):
+
+```json
+{
+  "suggestion_id": 123,
+  "ticket_id": 2025121101,
+  "suggested_path": "TI > Requisição > ...",
+  "parent_glpi_id": 1,
+  "category_name": "Acesso",
+  "status": "approved",
+  "notes": "",
+  "reviewed_by": "admin",
+  "reviewed_at": "2025-12-18T10:20:30.123456",
+  "type": "category-suggestion-review",
+  "is_incident": 0,
+  "is_request": 1,
+  "is_problem": 0,
+  "is_change": 0
+}
+```
+
+**Campos de tipo de ticket:**
+- `is_incident`: `1` se a categoria é para incidentes, `0` caso contrário
+- `is_request`: `1` se a categoria é para requisições, `0` caso contrário
+- `is_problem`: `1` se a categoria é para problemas, `0` caso contrário (atualmente sempre `0`)
+- `is_change`: `1` se a categoria é para mudanças, `0` caso contrário (atualmente sempre `0`)
+
+O tipo é determinado automaticamente pelo backend baseado no caminho da categoria (`suggested_path`):
+- Se contém "Incidente" → `is_incident = 1`
+- Se contém "Requisição" ou "Administrativo" → `is_request = 1`
+
 ## Pesquisa de Satisfação
 
 O sistema permite coletar avaliações de satisfação dos usuários sobre o atendimento recebido.
@@ -206,9 +250,9 @@ O sistema permite coletar avaliações de satisfação dos usuários sobre o ate
    ... (até 5)
    ```
 
-2. Configure `N8N_WEBHOOK_URL` no `.env` para sincronizar com GLPI:
+2. Configure `N8N_SURVEY_RESPONSE_WEBHOOK_URL` no `.env` para sincronizar com GLPI:
    ```
-   N8N_WEBHOOK_URL=http://seu-n8n/webhook/glpi/survey-response
+   N8N_SURVEY_RESPONSE_WEBHOOK_URL=http://seu-n8n/webhook/glpi/survey-response
    ```
 
 3. O Django notifica o n8n automaticamente após salvar a pesquisa, que atualiza o GLPI via API.
@@ -319,7 +363,7 @@ Configure as seguintes variáveis de ambiente no arquivo `.env` (incluído no `.
 - `GLPI_LEGACY_API_USER` — usuário para autenticação na API Legacy
 - `GLPI_LEGACY_API_PASSWORD` — senha para autenticação na API Legacy
 - `GLPI_LEGACY_APP_TOKEN` — token do aplicativo (opcional, se configurado no GLPI)
-- `N8N_WEBHOOK_URL` — URL do webhook n8n para atualizar pesquisa de satisfação no GLPI
+- `N8N_SURVEY_RESPONSE_WEBHOOK_URL` — URL do webhook n8n para atualizar pesquisa de satisfação no GLPI
 
 ### Configuração do Google Gemini (Opcional)
 

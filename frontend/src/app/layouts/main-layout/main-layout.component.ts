@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, RouterOutlet } from '@angular/router';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TopbarComponent } from './topbar/topbar.component';
 import { SidenavComponent } from './sidenav/sidenav.component';
 
@@ -18,6 +19,7 @@ import { SidenavComponent } from './sidenav/sidenav.component';
     CommonModule,
     RouterModule,
     RouterOutlet,
+    ConfirmDialogModule,
     TopbarComponent,
     SidenavComponent
   ],

@@ -182,7 +182,7 @@ class TicketAdmin(admin.ModelAdmin):
         return "-"
     
     satisfaction_survey_display.short_description = 'Pesquisa de Satisfação'
-
+    
 @admin.register(GlpiCategory)
 class GlpiCategoryAdmin(admin.ModelAdmin):
     """
@@ -316,7 +316,7 @@ class CategorySuggestionAdmin(admin.ModelAdmin):
         'reviewed_at',
         'reviewed_by'
     )
-    actions = ['approve_suggestions', 'reject_suggestions']
+    actions = ['approve_suggestions', 'reject_suggestions', 'reset_to_pending']
     
     fieldsets = (
         ('Sugestão', {
@@ -408,6 +408,27 @@ class CategorySuggestionAdmin(admin.ModelAdmin):
             count += 1
         self.message_user(request, f'{count} sugestão(ões) rejeitada(s).')
     reject_suggestions.short_description = 'Rejeitar sugestões selecionadas'
+    
+    def reset_to_pending(self, request, queryset):
+        """
+        Reverte sugestões aprovadas/rejeitadas para pendente.
+        
+        Limpa os campos de revisão (reviewed_at, reviewed_by) e altera
+        o status para 'pending', permitindo nova revisão.
+        
+        Args:
+            request: Requisição HTTP
+            queryset: QuerySet de sugestões selecionadas
+        """
+        count = 0
+        for suggestion in queryset.exclude(status='pending'):
+            suggestion.status = 'pending'
+            suggestion.reviewed_at = None
+            suggestion.reviewed_by = None
+            suggestion.save()
+            count += 1
+        self.message_user(request, f'{count} sugestão(ões) revertida(s) para pendente.')
+    reset_to_pending.short_description = 'Reverter para pendente'
 
 @admin.register(SatisfactionSurvey)
 class SatisfactionSurveyAdmin(admin.ModelAdmin):

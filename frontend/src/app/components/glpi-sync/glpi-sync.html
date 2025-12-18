@@ -1,0 +1,31 @@
+<section class="container">
+  <header class="header">
+    <h2>Sincronização</h2>
+    <p class="subtitle">Atualize o espelho local de categorias do GLPI.</p>
+  </header>
+
+  <div class="card">
+    <div class="actions">
+      <button
+        pButton
+        type="button"
+        label="Sincronizar agora"
+        icon="pi pi-refresh"
+        [loading]="syncing"
+        [disabled]="syncing"
+        (click)="sync()"
+      ></button>
+    </div>
+
+    @if (lastResult) {
+      <div class="result">
+        <div class="result-row"><span>Total:</span> <strong>{{ lastResult.total }}</strong></div>
+        <div class="result-row"><span>Criadas:</span> <strong>{{ lastResult.created }}</strong></div>
+        <div class="result-row"><span>Atualizadas:</span> <strong>{{ lastResult.updated }}</strong></div>
+        <div class="result-row"><span>Removidas:</span> <strong>{{ lastResult.deleted }}</strong></div>
+      </div>
+    }
+  </div>
+</section>
+
+

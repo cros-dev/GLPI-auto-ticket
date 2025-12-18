@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { CategorySuggestions } from './components/category-suggestions/category-suggestions';
+import { GlpiSyncComponent } from './components/glpi-sync/glpi-sync';
 import { Login } from './components/login/login';
 import { MainLayoutComponent } from './layouts/main-layout/main-layout.component';
 import { authGuard } from './guards/auth.guard';
@@ -22,6 +23,10 @@ export const routes: Routes = [
       {
         path: 'category-suggestions',
         component: CategorySuggestions
+      },
+      {
+        path: 'sync',
+        component: GlpiSyncComponent
       }
     ]
   }

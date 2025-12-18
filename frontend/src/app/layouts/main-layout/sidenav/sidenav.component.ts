@@ -69,6 +69,11 @@ export class SidenavComponent implements OnInit, OnDestroy {
       icon: 'pi pi-check-circle',
       routerLink: ['/category-suggestions'],
       queryParams: { status: 'approved' }
+    },
+    {
+      label: 'Sincronização',
+      icon: 'pi pi-refresh',
+      routerLink: ['/sync']
     }
   ];
   }

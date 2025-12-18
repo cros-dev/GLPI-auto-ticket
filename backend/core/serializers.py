@@ -168,3 +168,24 @@ class SatisfactionSurveySerializer(serializers.Serializer):
         allow_blank=True,
         help_text="Comentário opcional do usuário sobre o atendimento"
     )
+
+
+# =========================================================
+# 7. SUGESTÕES DE CATEGORIAS
+# =========================================================
+
+class CategorySuggestionReviewSerializer(serializers.Serializer):
+    """
+    Serializer para aprovação/rejeição de sugestões de categorias.
+    
+    Valida payload opcional enviado pelo frontend ao revisar uma sugestão.
+    
+    Campos:
+        notes: Observações do revisor (opcional)
+    """
+    notes = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        help_text="Notas opcionais sobre a aprovação/rejeição"
+    )

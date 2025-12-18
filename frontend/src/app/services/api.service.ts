@@ -86,5 +86,27 @@ export class ApiService {
     const url = `${this.apiUrl}/category-suggestions/stats/`;
     return this.http.get<CategorySuggestionStats>(url);
   }
+
+  /**
+   * Sincroniza categorias do GLPI a partir da API (backend faz a integração).
+   *
+   * Endpoint: POST /api/glpi/categories/sync-from-api/
+   *
+   * @returns Observable com estatísticas da sincronização
+   */
+  syncGlpiCategoriesFromApi(): Observable<{
+    created: number;
+    updated: number;
+    deleted: number;
+    total: number;
+  }> {
+    const url = `${this.apiUrl}/glpi/categories/sync-from-api/`;
+    return this.http.post<{
+      created: number;
+      updated: number;
+      deleted: number;
+      total: number;
+    }>(url, {});
+  }
 }
 
