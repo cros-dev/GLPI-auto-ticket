@@ -7,19 +7,79 @@
   box-sizing: border-box;
 }
 
+/* Utilitários simples (sem dependência de framework) */
+.w-full {
+  width: 100%;
+}
+
 :root {
   /* Layout */
   --sidebar-width: 280px;
   --topbar-height: 64px;
   --content-padding: 1rem;
   
-  /* Cores - Base (mantendo apenas essenciais, cores específicas vêm do tema PrimeNG) */
-  --text-color: #333;
-  --text-color-secondary: #666;
-  --text-color-tertiary: #555;
-  --border-color: #ddd;
-  --bg-color: #f8f9fa;
-  --bg-disabled: #f5f5f5;
+  /* =========================================================
+   * Tokens do APP (Light por padrão)
+   * - PrimeNG controla --p-*
+   * - Layout e componentes usam --app-* (ou aliases compat)
+   * ========================================================= */
+
+  /* Base */
+  --app-primary: var(--p-primary-color);
+  --app-text: var(--p-text-color);
+  --app-text-muted: var(--p-text-muted-color);
+  --app-border: var(--p-content-border-color);
+  --app-bg: var(--p-surface-50);
+  --app-bg-disabled: var(--p-surface-200);
+
+  /* Superfícies */
+  /* Requisito: cards/caixas mais claros (surface-0) em ambos os modos */
+  --app-surface-card: var(--p-surface-0);
+
+  /* Destaques/seleção (para usos pontuais em componentes custom) */
+  --app-highlight-bg: var(--p-highlight-background);
+  --app-highlight-text: var(--p-highlight-color);
+
+  /* Bordas sutis */
+  --app-border-subtle: color-mix(in srgb, var(--app-border) 55%, transparent);
+
+  /* Sidebar/Sidenav (segue o modo) */
+  --app-sidebar-bg: var(--p-surface-0);
+  --app-sidebar-text: var(--p-text-color);
+  --app-sidebar-border: var(--p-content-border-color);
+  --app-sidebar-hover-bg: var(--p-content-hover-background);
+  --app-sidebar-active-bg: var(--p-highlight-background);
+
+  /* Topbar (segue o modo) */
+  --app-topbar-bg: var(--p-surface-0);
+  --app-topbar-text: var(--p-text-color);
+  --app-topbar-border: var(--p-content-border-color);
+  --app-topbar-brand: var(--p-primary-color);
+
+  /* =========================================================
+   * Aliases compat (para não quebrar CSS existente)
+   * ========================================================= */
+  --primary-color: var(--app-primary);
+  --text-color: var(--app-text);
+  --text-color-secondary: var(--app-text-muted);
+  --text-color-tertiary: var(--app-text-muted);
+  --border-color: var(--app-border);
+  --bg-color: var(--app-bg);
+  --bg-disabled: var(--app-bg-disabled);
+  --border-color-subtle: var(--app-border-subtle);
+  --highlight-bg: var(--app-highlight-bg);
+  --highlight-text: var(--app-highlight-text);
+
+  --sidebar-bg-color: var(--app-sidebar-bg);
+  --sidebar-text-color: var(--app-sidebar-text);
+  --sidebar-border-color: var(--app-sidebar-border);
+  --sidebar-hover-bg: var(--app-sidebar-hover-bg);
+  --sidebar-active-bg: var(--app-sidebar-active-bg);
+
+  --topbar-bg-color: var(--app-topbar-bg);
+  --topbar-text-color: var(--app-topbar-text);
+  --topbar-border-color: var(--app-topbar-border);
+  --topbar-brand-color: var(--app-topbar-brand);
   
   /* Espaçamentos */
   --spacing-xs: 0.25rem;
@@ -40,6 +100,24 @@
   --shadow-md: 0 10px 40px rgba(0, 0, 0, 0.2);
 }
 
+:root.app-dark {
+  /* Dark overrides (layout segue o modo) */
+  --app-bg: var(--p-surface-950);
+  --app-bg-disabled: var(--p-surface-800);
+
+  /* No dark, cards/caixas precisam contrastar com o fundo sem ficar "brancos" */
+  --app-surface-card: var(--p-surface-900);
+
+  --app-sidebar-bg: var(--p-surface-900);
+  --app-sidebar-text: var(--p-surface-0);
+  --app-sidebar-border: color-mix(in srgb, var(--p-surface-0) 12%, transparent);
+  --app-sidebar-hover-bg: var(--p-surface-800);
+
+  --app-topbar-bg: var(--p-surface-900);
+  --app-topbar-text: var(--p-surface-0);
+  --app-topbar-border: color-mix(in srgb, var(--p-surface-0) 12%, transparent);
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -49,6 +127,7 @@ html, body {
 
 body {
   background-color: var(--bg-color);
+  color: var(--text-color);
 }
 
 /* Estados comuns (empty, error) */
@@ -60,13 +139,16 @@ body {
 
 .error {
   padding: var(--spacing-lg);
+  color: var(--text-color);
+  background-color: var(--app-surface-card);
+  border: 1px solid var(--border-color);
   border-radius: var(--border-radius-sm);
   margin-bottom: var(--spacing-md);
 }
 
 /* Cards */
 .card {
-  background: #ffffff;
+  background: var(--app-surface-card);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
   padding: var(--spacing-lg);
@@ -102,6 +184,7 @@ textarea {
 input:focus,
 textarea:focus {
   outline: none;
+  border-color: var(--primary-color);
 }
 
 input:disabled,

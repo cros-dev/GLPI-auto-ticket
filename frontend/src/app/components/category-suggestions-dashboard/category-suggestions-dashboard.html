@@ -11,7 +11,10 @@
     <!-- Error -->
     <div class="error">
       <p>{{ error }}</p>
-      <p-button label="Tentar novamente" (onClick)="loadStats()"></p-button>
+      <p-button
+        label="Tentar novamente"
+        (onClick)="loadStats()">
+      </p-button>
     </div>
   } @else if (stats && cards.length > 0) {
     <!-- Dashboard Cards -->

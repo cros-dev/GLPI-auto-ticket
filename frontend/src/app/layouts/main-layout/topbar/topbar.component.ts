@@ -6,6 +6,7 @@ import { ButtonModule } from 'primeng/button';
 import { MenuModule } from 'primeng/menu';
 import { MenuItem } from 'primeng/api';
 import { AuthService } from '../../../services/auth.service';
+import { ThemeService } from '../../../services/theme.service';
 
 /**
  * Componente da barra superior (topbar) do layout principal.
@@ -29,7 +30,8 @@ export class TopbarComponent {
 
   constructor(
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private themeService: ThemeService
   ) {
     this.initializeUserMenu();
   }
@@ -68,6 +70,18 @@ export class TopbarComponent {
    */
   onToggleSidenav(): void {
     this.toggleSidenav.emit();
+  }
+
+  toggleTheme(): void {
+    this.themeService.toggle();
+  }
+
+  get themeIcon(): string {
+    return this.themeService.getMode() === 'dark' ? 'pi pi-sun' : 'pi pi-moon';
+  }
+
+  get themeAriaLabel(): string {
+    return this.themeService.getMode() === 'dark' ? 'Alternar para tema claro' : 'Alternar para tema escuro';
   }
 
   /**

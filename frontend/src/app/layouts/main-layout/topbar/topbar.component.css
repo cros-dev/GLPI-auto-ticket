@@ -1,8 +1,8 @@
-:host ::ng-deep .topbar {
+.topbar {
   height: var(--topbar-height);
   padding: 0 var(--spacing-lg);
-  border-bottom: 1px solid var(--border-color);
-  background: #ffffff;
+  border-bottom: 1px solid var(--topbar-border-color);
+  background: var(--topbar-bg-color);
   border-radius: 0;
 }
 
@@ -21,13 +21,13 @@
 .logo {
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--p-primary-color, #6366f1);
+  color: var(--topbar-brand-color);
 }
 
 .title {
   font-size: 1rem;
   font-weight: 500;
-  color: var(--text-color);
+  color: var(--topbar-text-color);
 }
 
 .topbar-right {

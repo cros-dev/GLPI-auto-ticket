@@ -1,6 +1,6 @@
 <div class="login-container">
   <div class="card login-card">
-    <h1>Sugestões de Categorias</h1>
+    <h1>GRAM-auto-ticket</h1>
     <p class="subtitle">Faça login para continuar</p>
 
     <form (ngSubmit)="onSubmit()" #loginForm="ngForm">
@@ -32,11 +32,11 @@
 
       <p-button
         type="submit"
-        label="{{ loading ? 'Entrando...' : 'Entrar' }}"
-        [disabled]="loading || !username || !password"
+        label="Entrar"
+        size="large"
         [loading]="loading"
-        [style]="{ width: '100%' }"
-        class="btn-login">
+        [disabled]="loading || !username || !password"
+        styleClass="w-full">
       </p-button>
     </form>
   </div>

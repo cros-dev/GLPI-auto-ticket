@@ -1,9 +1,9 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
+import { ButtonModule } from 'primeng/button';
 import { Subject } from 'rxjs';
 import { takeUntil, distinctUntilChanged } from 'rxjs/operators';
-import { ButtonModule } from 'primeng/button';
 import { ApiService } from '../../services/api.service';
 import { NotificationService } from '../../services/notification.service';
 import { CacheService } from '../../services/cache.service';
@@ -254,6 +254,7 @@ export class CategorySuggestions implements OnInit, OnDestroy {
   formatDate(dateString: string | null): string {
     return formatDate(dateString);
   }
+
 
   /**
    * Decodifica entidades HTML escapadas para exibição como texto normal.

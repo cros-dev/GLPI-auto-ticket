@@ -1,11 +1,11 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, PLATFORM_ID, Inject } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
-import { RouterModule } from '@angular/router';
+import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { DrawerModule } from 'primeng/drawer';
-import { PanelMenuModule } from 'primeng/panelmenu';
+import { MenuModule } from 'primeng/menu';
 import { MenuItem } from 'primeng/api';
 import { fromEvent, Subject } from 'rxjs';
-import { takeUntil, debounceTime } from 'rxjs/operators';
+import { takeUntil, debounceTime, filter } from 'rxjs/operators';
 
 /**
  * Componente de navegação lateral (sidenav).
@@ -19,7 +19,7 @@ import { takeUntil, debounceTime } from 'rxjs/operators';
 @Component({
   selector: 'app-sidenav',
   standalone: true,
-  imports: [CommonModule, RouterModule, DrawerModule, PanelMenuModule],
+  imports: [CommonModule, RouterModule, DrawerModule, MenuModule],
   templateUrl: './sidenav.component.html',
   styleUrl: './sidenav.component.css'
 })
@@ -39,7 +39,10 @@ export class SidenavComponent implements OnInit, OnDestroy {
   /** Itens de menu exibidos no sidenav. */
   menuItems: MenuItem[] = [];
 
-  constructor(@Inject(PLATFORM_ID) private platformId: Object) {
+  constructor(
+    @Inject(PLATFORM_ID) private platformId: Object,
+    private router: Router
+  ) {
     this.initializeMenuItems();
   }
 
@@ -51,33 +54,21 @@ export class SidenavComponent implements OnInit, OnDestroy {
   private initializeMenuItems(): void {
     this.menuItems = [
     {
-      label: 'Início',
-      icon: 'pi pi-home',
-      routerLink: '/'
-    },
-    {
       label: 'Sugestões de Categorias',
       icon: 'pi pi-tags',
-        routerLink: ['/category-suggestions'],
-      items: [
-          {
-            label: 'Dashboard',
-            icon: 'pi pi-chart-bar',
-            routerLink: ['/category-suggestions']
-          },
+      routerLink: ['/category-suggestions']
+    },
         {
           label: 'Pendentes',
           icon: 'pi pi-clock',
-            routerLink: ['/category-suggestions'],
-            queryParams: { status: 'pending' }
-          },
-          {
-            label: 'Aprovadas',
-            icon: 'pi pi-check-circle',
-            routerLink: ['/category-suggestions'],
-            queryParams: { status: 'approved' }
-        }
-      ]
+      routerLink: ['/category-suggestions'],
+      queryParams: { status: 'pending' }
+    },
+    {
+      label: 'Aprovadas',
+      icon: 'pi pi-check-circle',
+      routerLink: ['/category-suggestions'],
+      queryParams: { status: 'approved' }
     }
   ];
   }
@@ -94,6 +85,18 @@ export class SidenavComponent implements OnInit, OnDestroy {
           takeUntil(this.destroy$)
         )
         .subscribe(() => this.checkMobile());
+
+      // UX (mobile): fecha automaticamente o drawer ao navegar
+      this.router.events
+        .pipe(
+          filter((event) => event instanceof NavigationEnd),
+          takeUntil(this.destroy$)
+        )
+        .subscribe(() => {
+          if (this.isMobile && this.visible) {
+            this.visibleChange.emit(false);
+          }
+        });
     }
   }
 
@@ -111,7 +114,20 @@ export class SidenavComponent implements OnInit, OnDestroy {
    * @private
    */
   private checkMobile(): void {
+    const wasMobile = this.isMobile;
     this.isMobile = window.innerWidth < 768;
+
+    // Sincroniza o estado ao cruzar o breakpoint (evita estado "estranho" ao redimensionar)
+    if (!wasMobile && this.isMobile) {
+      // Entrou no mobile → fecha por padrão
+      this.visibleChange.emit(false);
+      return;
+    }
+
+    if (wasMobile && !this.isMobile) {
+      // Saiu do mobile → abre no desktop por padrão
+      this.visibleChange.emit(true);
+    }
   }
 
   /**

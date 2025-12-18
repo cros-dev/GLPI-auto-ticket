@@ -9,27 +9,13 @@
     (onHide)="onHide()">
     
     <div class="sidenav-content">
-      <div class="sidenav-header">
-        <h2>Menu</h2>
-      </div>
-      
-      <p-panelmenu 
-        [model]="menuItems"
-        styleClass="sidenav-menu">
-      </p-panelmenu>
+      <p-menu [model]="menuItems" styleClass="sidenav-menu"></p-menu>
     </div>
   </p-drawer>
 } @else {
   <!-- Desktop: sidenav no layout -->
   <div class="sidenav-content">
-    <div class="sidenav-header">
-      <h2>Menu</h2>
-    </div>
-    
-    <p-panelmenu 
-      [model]="menuItems"
-      styleClass="sidenav-menu">
-    </p-panelmenu>
+    <p-menu [model]="menuItems" styleClass="sidenav-menu"></p-menu>
   </div>
 }
 

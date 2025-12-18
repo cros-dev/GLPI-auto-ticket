@@ -20,7 +20,7 @@
 }
 
 .dashboard-card {
-  background: #ffffff;
+  background: var(--app-surface-card);
   border: 2px solid var(--border-color);
   border-radius: var(--border-radius);
   padding: var(--spacing-lg);
@@ -38,26 +38,12 @@
 .dashboard-card.card-clickable:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
+  border-color: var(--primary-color);
 }
 
-.dashboard-card.card-primary .card-icon {
-  background: var(--p-primary-color, #6366f1);
-  color: #ffffff;
-}
-
-.dashboard-card.card-warning .card-icon {
-  background: var(--p-warning-color, #f59e0b);
-  color: #000000;
-}
-
-.dashboard-card.card-success .card-icon {
-  background: var(--p-success-color, #10b981);
-  color: #ffffff;
-}
-
-.dashboard-card.card-danger .card-icon {
-  background: var(--p-danger-color, #ef4444);
-  color: #ffffff;
+.dashboard-card .card-icon {
+  background: var(--highlight-bg);
+  color: var(--highlight-text);
 }
 
 .card-icon {

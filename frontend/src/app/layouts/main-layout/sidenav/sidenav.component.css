@@ -1,19 +1,20 @@
+
 .sidenav-content {
   height: 100%;
   display: flex;
   flex-direction: column;
   width: var(--sidebar-width);
+  background: var(--sidebar-bg-color);
+  color: var(--sidebar-text-color);
 }
 
-.sidenav-header {
-  padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--border-color);
+/* Mobile drawer: o p-drawer cria container interno, então precisamos aplicar o fundo via ::ng-deep */
+:host ::ng-deep .sidenav-drawer.p-drawer {
+  position: fixed;
 }
 
-.sidenav-header h2 {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
+:host ::ng-deep .sidenav-drawer.p-drawer .p-drawer-content {
+  background: var(--sidebar-bg-color);
 }
 
 :host ::ng-deep .sidenav-menu {
@@ -22,29 +23,25 @@
   width: 100%;
 }
 
-:host ::ng-deep .sidenav-menu .p-panelmenu-panel {
-  border: none;
-  margin-bottom: 0;
-}
-
-:host ::ng-deep .sidenav-menu .p-panelmenu-header {
-  border: none;
-  border-radius: 0;
-  padding: var(--spacing-md) var(--spacing-lg);
-}
-
-:host ::ng-deep .sidenav-menu .p-panelmenu-header-link {
-  padding: 0;
-  border-radius: 0;
-}
-
-:host ::ng-deep .sidenav-menu .p-panelmenu-content {
-  border: none;
-  padding: 0;
-}
-
 :host ::ng-deep .sidenav-menu .p-menuitem-link {
   padding: var(--spacing-md) var(--spacing-lg);
   border-radius: 0;
+  color: var(--sidebar-text-color);
+}
+
+:host ::ng-deep .sidenav-menu .p-menuitem-link:hover {
+  background: var(--sidebar-hover-bg);
+}
+
+:host ::ng-deep .sidenav-menu .p-menuitem-link .p-menuitem-text {
+  color: var(--sidebar-text-color);
+}
+
+:host ::ng-deep .sidenav-menu .p-menuitem-link .p-menuitem-icon {
+  color: var(--sidebar-text-color);
+}
+
+:host ::ng-deep .sidenav-menu .p-menuitem-link.p-menuitem-link-active {
+  background: var(--sidebar-active-bg);
 }
 

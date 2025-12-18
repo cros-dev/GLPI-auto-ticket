@@ -15,6 +15,13 @@
   </div>
   
   <div class="topbar-right">
+    <button
+      pButton
+      [icon]="themeIcon"
+      class="p-button-text p-button-rounded"
+      (click)="toggleTheme()"
+      [attr.aria-label]="themeAriaLabel">
+    </button>
     <p-menu 
       #userMenu 
       [model]="userMenuItems" 

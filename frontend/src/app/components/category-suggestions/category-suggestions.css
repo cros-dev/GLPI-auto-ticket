@@ -48,8 +48,8 @@ h1 {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--p-primary-color, #6366f1);
-  color: #ffffff;
+  background-color: var(--primary-color);
+  color: var(--app-surface-card);
   font-size: 0.875rem;
   font-weight: 600;
   flex-shrink: 0;
@@ -64,18 +64,18 @@ h1 {
 }
 
 .badge.pending {
-  background: var(--p-warning-color, #f59e0b);
-  color: #000000;
+  background-color: var(--bg-disabled);
+  color: var(--text-color);
 }
 
 .badge.approved {
-  background: var(--p-success-color, #10b981);
-  color: #ffffff;
+  background-color: var(--highlight-bg);
+  color: var(--highlight-text);
 }
 
 .badge.rejected {
-  background: var(--p-danger-color, #ef4444);
-  color: #ffffff;
+  background-color: var(--bg-disabled);
+  color: var(--text-color);
 }
 
 .ticket-info {
@@ -98,6 +98,31 @@ h1 {
   border-radius: var(--border-radius-sm);
 }
 
+.ticket-content-clickable {
+  position: relative;
+  cursor: pointer;
+  transition: box-shadow var(--transition), outline-color var(--transition);
+}
+
+.ticket-content-clickable:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.content-expand-icon {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  color: var(--text-color-secondary);
+  font-size: 0.9rem;
+  opacity: 0.85;
+  pointer-events: none; /* mantém o card inteiro clicável */
+}
+
+.ticket-content-clickable:hover .content-expand-icon {
+  color: var(--primary-color);
+  opacity: 1;
+}
+
 .ticket-content p {
   margin: var(--spacing-sm) 0;
 }
@@ -110,28 +135,17 @@ h1 {
   line-height: 1.5;
 }
 
-.content-clickable {
-  cursor: pointer;
-  transition: color var(--transition);
-  max-height: 150px;
+.content-preview {
+  /* Preview consistente (mantém modal com conteúdo completo) */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
   overflow: hidden;
-  text-overflow: ellipsis;
-  position: relative;
 }
 
-.content-clickable:hover {
-  color: var(--p-primary-color, #6366f1);
-  text-decoration: underline;
-}
-
-.content-clickable::after {
-  content: '... (clique para ver mais)';
-  display: block;
-  margin-top: var(--spacing-xs);
-  font-size: 0.85rem;
-  font-style: italic;
-  color: var(--p-primary-color, #6366f1);
-}
+/* Removido: dica "... (clique para ver mais)".
+   Agora o card inteiro do conteúdo é clicável e abre o modal. */
 
 .suggestion-actions {
   display: flex;

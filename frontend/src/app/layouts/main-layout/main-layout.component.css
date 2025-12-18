@@ -26,7 +26,8 @@
     flex-shrink: 0;
     transition: width var(--transition);
     overflow: hidden;
-    border-right: 1px solid var(--border-color);
+    background: var(--sidebar-bg-color);
+    border-right: 1px solid var(--sidebar-border-color);
   }
 
   .sidenav-layout.open {
@@ -38,9 +39,5 @@
 @media (max-width: 767px) {
   .sidenav-layout {
     display: none;
-  }
-
-  :host ::ng-deep .sidenav-drawer.p-drawer {
-    position: fixed;
   }
 }

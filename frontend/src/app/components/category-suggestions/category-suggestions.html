@@ -61,12 +61,13 @@
               </div>
 
               @if (suggestion.ticket_content) {
-                <div class="ticket-content">
+                <div
+                  class="ticket-content ticket-content-clickable"
+                  (click)="openContentDialog(suggestion.ticket_title, suggestion.ticket_content)"
+                  title="Clique para ver o conteúdo completo">
                   <p><strong>Conteúdo do ticket:</strong></p>
-                  <p 
-                    class="content-text content-clickable" 
-                    (click)="openContentDialog(suggestion.ticket_title, suggestion.ticket_content)"
-                    title="Clique para ver o conteúdo completo">
+                  <i class="pi pi-window-maximize content-expand-icon" aria-hidden="true"></i>
+                  <p class="content-text content-preview">
                     {{ decodeHtml(suggestion.ticket_content) }}
                   </p>
                 </div>
@@ -75,19 +76,17 @@
 
             @if (!isApprovedView) {
               <div class="suggestion-actions">
-                <p-button 
+                <p-button
                   label="Aprovar"
                   icon="pi pi-check"
                   severity="success"
-                  (onClick)="approveSuggestion(suggestion.id)"
-                  class="btn-approve">
+                  (onClick)="approveSuggestion(suggestion.id)">
                 </p-button>
-                <p-button 
+                <p-button
                   label="Rejeitar"
                   icon="pi pi-times"
                   severity="danger"
-                  (onClick)="rejectSuggestion(suggestion.id)"
-                  class="btn-reject">
+                  (onClick)="rejectSuggestion(suggestion.id)">
                 </p-button>
               </div>
             }
