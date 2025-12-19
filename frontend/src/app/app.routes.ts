@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { CategorySuggestions } from './components/category-suggestions/category-suggestions';
+import { CategoryPreviewComponent } from './components/category-preview/category-preview';
 import { GlpiSyncComponent } from './components/glpi-sync/glpi-sync';
 import { Login } from './components/login/login';
 import { MainLayoutComponent } from './layouts/main-layout/main-layout.component';
@@ -23,6 +24,10 @@ export const routes: Routes = [
       {
         path: 'category-suggestions',
         component: CategorySuggestions
+      },
+      {
+        path: 'category-preview',
+        component: CategoryPreviewComponent
       },
       {
         path: 'sync',

@@ -6,7 +6,7 @@ Define todas as rotas da API organizadas por funcionalidade:
 2. Webhook de tickets
 3. API de tickets
 4. Classificação de tickets
-5. Sugestões de categorias (listagem, prévia, aprovação, rejeição)
+5. Sugestões de categorias (listagem, detalhe, edição, prévia, aprovação, rejeição)
 """
 from django.urls import path
 from .views import (
@@ -18,6 +18,7 @@ from .views import (
     TicketClassificationView,
     CategorySuggestionListView,
     CategorySuggestionStatsView,
+    CategorySuggestionUpdateView,
     CategorySuggestionApproveView,
     CategorySuggestionRejectView,
     CategorySuggestionPreviewView
@@ -51,10 +52,11 @@ urlpatterns = [
     # =========================================================
     path('category-suggestions/', CategorySuggestionListView.as_view(), name='category-suggestion-list'),
     path('category-suggestions/stats/', CategorySuggestionStatsView.as_view(), name='category-suggestion-stats'),
+    path('category-suggestions/<int:pk>/', CategorySuggestionUpdateView.as_view(), name='category-suggestion-detail'),
     path('category-suggestions/preview/', CategorySuggestionPreviewView.as_view(), name='category-suggestion-preview'),
     path('category-suggestions/<int:pk>/approve/', CategorySuggestionApproveView.as_view(), name='category-suggestion-approve'),
     path('category-suggestions/<int:pk>/reject/', CategorySuggestionRejectView.as_view(), name='category-suggestion-reject'),
-    
+
     # =========================================================
     # 6. PESQUISA DE SATISFAÇÃO
     # =========================================================

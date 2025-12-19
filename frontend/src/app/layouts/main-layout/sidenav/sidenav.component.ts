@@ -53,29 +53,34 @@ export class SidenavComponent implements OnInit, OnDestroy {
    */
   private initializeMenuItems(): void {
     this.menuItems = [
-    {
-      label: 'Sugestões de Categorias',
-      icon: 'pi pi-tags',
-      routerLink: ['/category-suggestions']
-    },
-        {
-          label: 'Pendentes',
-          icon: 'pi pi-clock',
-      routerLink: ['/category-suggestions'],
-      queryParams: { status: 'pending' }
-    },
-    {
-      label: 'Aprovadas',
-      icon: 'pi pi-check-circle',
-      routerLink: ['/category-suggestions'],
-      queryParams: { status: 'approved' }
-    },
-    {
-      label: 'Sincronização',
-      icon: 'pi pi-refresh',
-      routerLink: ['/sync']
-    }
-  ];
+      {
+        label: 'Sugestões de Categorias',
+        icon: 'pi pi-tags',
+        routerLink: ['/category-suggestions']
+      },
+      {
+        label: 'Pendentes',
+        icon: 'pi pi-clock',
+        routerLink: ['/category-suggestions'],
+        queryParams: { status: 'pending' }
+      },
+      {
+        label: 'Aprovadas',
+        icon: 'pi pi-check-circle',
+        routerLink: ['/category-suggestions'],
+        queryParams: { status: 'approved' }
+      },
+      {
+        label: 'Preview de Categoria',
+        icon: 'pi pi-search',
+        routerLink: ['/category-preview']
+      },
+      {
+        label: 'Sincronização',
+        icon: 'pi pi-refresh',
+        routerLink: ['/sync']
+      }
+    ];
   }
 
   /**

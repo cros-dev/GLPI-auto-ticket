@@ -62,7 +62,7 @@ class Ticket(models.Model):
     # ID do ticket (mesmo ID do GLPI)
     id = models.IntegerField(
         primary_key=True,
-        verbose_name='ID do Ticket GLPI'
+        verbose_name = 'ID do Ticket GLPI'
     )
 
     raw_payload = models.JSONField(

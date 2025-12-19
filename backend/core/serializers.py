@@ -189,3 +189,25 @@ class CategorySuggestionReviewSerializer(serializers.Serializer):
         allow_blank=True,
         help_text="Notas opcionais sobre a aprovação/rejeição"
     )
+
+
+class CategorySuggestionUpdateSerializer(serializers.Serializer):
+    """
+    Serializer para edição de sugestões de categorias.
+    
+    Permite editar o caminho sugerido e notas de sugestões pendentes.
+    
+    Campos:
+        suggested_path: Caminho completo da categoria (obrigatório)
+        notes: Notas adicionais sobre a sugestão (opcional)
+    """
+    suggested_path = serializers.CharField(
+        max_length=1024,
+        help_text="Caminho completo sugerido (ex.: 'TI > Requisição > Administrativo > Montagem de Setup > Transmissão/Vídeo Conferência')"
+    )
+    notes = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        help_text="Notas adicionais sobre a sugestão"
+    )

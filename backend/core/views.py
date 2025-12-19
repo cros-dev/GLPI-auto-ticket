@@ -11,7 +11,6 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from django.http import Http404
 from django.utils import timezone
 from django.shortcuts import render
 from django.conf import settings
@@ -26,7 +25,8 @@ from .serializers import (
     TicketClassificationSerializer,
     TicketClassificationResponseSerializer,
     SatisfactionSurveySerializer,
-    CategorySuggestionReviewSerializer
+    CategorySuggestionReviewSerializer,
+    CategorySuggestionUpdateSerializer
 )
 from .utils import clean_html_content
 from .services import (
@@ -132,7 +132,7 @@ def _process_categories_sync(categories, source_name="fonte"):
     }
 
 
-def _notify_n8n_survey(ticket_id, rating, comment):
+def _notify_n8n_survey(*, ticket_id, rating, comment):
     """
     Notifica n8n para atualizar pesquisa de satisfação no GLPI.
     
@@ -201,7 +201,7 @@ def _notify_n8n_category_approval(
     n8n_webhook_url = getattr(settings, 'N8N_CATEGORY_APPROVAL_WEBHOOK_URL', None)
     
     if not n8n_webhook_url:
-        raise ValueError("N8N_CATEGORY_APPROVAL_WEBHOOK_URL não configurado")
+        return
     
     try:
         payload = {
@@ -227,42 +227,8 @@ def _notify_n8n_category_approval(
             timeout=10
         )
         response.raise_for_status()
-        
-        # Tenta parsear o JSON da resposta
-        try:
-            result = response.json()
-        except ValueError:
-            # Se não for JSON válido, mesmo com status 2xx, trata como erro
-            logger.error(f"n8n respondeu sem JSON válido (status {response.status_code})")
-            raise ValueError("n8n respondeu sem JSON válido. Não é possível validar o resultado.")
-        
-        # Valida a estrutura da resposta
-        if not isinstance(result, dict):
-            logger.error(f"n8n retornou resposta que não é um dicionário: {type(result)}")
-            raise ValueError("n8n retornou resposta inválida (não é JSON object)")
-        
-        # Verifica se há campo 'error' (indica falha)
-        if result.get('error'):
-            error_msg = result.get('error')
-            logger.error(f"n8n retornou erro: {error_msg}")
-            raise ValueError(f"n8n reportou erro: {error_msg}")
-        
-        # Verifica se há campo 'success' e se é False (indica falha)
-        if 'success' in result and not result.get('success'):
-            error_details = result.get('details', {})
-            error_message = error_details.get('message') if isinstance(error_details, dict) else result.get('message', 'Erro desconhecido')
-            logger.error(f"n8n retornou success=false: {error_message}")
-            raise ValueError(f"n8n reportou falha: {error_message}")
-        
-        # Se chegou aqui, é sucesso (ou não tem campo success, mas também não tem error)
-        # Se não tem campo 'success', loga warning mas permite (compatibilidade)
-        if 'success' not in result:
-            logger.warning(f"n8n retornou resposta sem campo 'success'. Considerando sucesso por compatibilidade: {result}")
-        
-        return result
     except requests.RequestException as e:
         logger.error(f"Erro ao notificar n8n: {str(e)}")
-        raise
 
 
 # =========================================================
@@ -607,11 +573,9 @@ class TicketClassificationView(APIView):
             return Response(
                 {"detail": error_message},
                 status=status.HTTP_400_BAD_REQUEST
-        )
+            )
         
         if result:
-            glpi_ticket_id = data.get("glpi_ticket_id")
-            
             if glpi_ticket_id:
                 try:
                     ticket = Ticket.objects.get(id=glpi_ticket_id)
@@ -633,7 +597,6 @@ class TicketClassificationView(APIView):
             response_serializer = TicketClassificationResponseSerializer(result)
             return Response(response_serializer.data, status=status.HTTP_200_OK)
         else:
-            glpi_ticket_id = data.get("glpi_ticket_id")
             suggestion_created = False
             
             if glpi_ticket_id:
@@ -742,8 +705,7 @@ class CategorySuggestionApproveView(APIView):
     
     Fluxo:
     - Notifica o n8n para criar/atualizar a categoria no GLPI
-    - Só confirma a aprovação (status=approved) após o n8n responder 2xx
-    - Em caso de falha no webhook, a sugestão permanece pendente
+    - Confirma a aprovação (status=approved) e salva no banco
     
     Payload opcional:
         {
@@ -791,37 +753,27 @@ class CategorySuggestionApproveView(APIView):
         
         parent_glpi_id = parent.glpi_id if parent else 0
         
-        # Determina o tipo de ticket baseado no caminho da categoria
         ticket_type, ticket_type_label = determine_ticket_type(path_parts)
         is_incident = 1 if ticket_type == 1 else 0
         is_request = 1 if ticket_type == 2 else 0
-        # Por padrão, não marcamos como problem ou change (pode ser configurado depois se necessário)
         is_problem = 0
         is_change = 0
 
-        try:
-            n8n_result = _notify_n8n_category_approval(
-                suggestion_id=suggestion.id,
-                ticket_id=suggestion.ticket.id,
-                suggested_path=suggestion.suggested_path,
-                parent_glpi_id=parent_glpi_id,
-                category_name=category_name,
-                status='approved',
-                notes=notes,
-                reviewed_by=reviewed_by,
-                reviewed_at=reviewed_at.isoformat(),
-                is_incident=is_incident,
-                is_request=is_request,
-                is_problem=is_problem,
-                is_change=is_change
-            )
-        except ValueError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        except requests.RequestException:
-            return Response(
-                {"detail": "Falha ao notificar o n8n. Aprovação não foi aplicada."},
-                status=status.HTTP_502_BAD_GATEWAY
-            )
+        _notify_n8n_category_approval(
+            suggestion_id=suggestion.id,
+            ticket_id=suggestion.ticket.id,
+            suggested_path=suggestion.suggested_path,
+            parent_glpi_id=parent_glpi_id,
+            category_name=category_name,
+            status='approved',
+            notes=notes,
+            reviewed_by=reviewed_by,
+            reviewed_at=reviewed_at.isoformat(),
+            is_incident=is_incident,
+            is_request=is_request,
+            is_problem=is_problem,
+            is_change=is_change
+        )
         
         suggestion.status = 'approved'
         suggestion.reviewed_at = reviewed_at
@@ -831,13 +783,12 @@ class CategorySuggestionApproveView(APIView):
         
         return Response(
             {
-            "detail": "Sugestão aprovada",
-                "n8n": n8n_result,
-            "suggestion": {
-                "id": suggestion.id,
-                "suggested_path": suggestion.suggested_path,
-                "status": suggestion.status
-            }
+                "detail": "Sugestão aprovada",
+                "suggestion": {
+                    "id": suggestion.id,
+                    "suggested_path": suggestion.suggested_path,
+                    "status": suggestion.status
+                }
             },
             status=status.HTTP_200_OK
         )
@@ -852,8 +803,7 @@ class CategorySuggestionRejectView(APIView):
     
     Fluxo:
     - Notifica o n8n para aplicar a rejeição conforme o fluxo do projeto
-    - Só confirma a rejeição (status=rejected) após o n8n responder 2xx
-    - Em caso de falha no webhook, a sugestão permanece pendente
+    - Confirma a rejeição (status=rejected) e salva no banco
     
     Payload opcional:
         {
@@ -901,37 +851,27 @@ class CategorySuggestionRejectView(APIView):
         
         parent_glpi_id = parent.glpi_id if parent else 0
         
-        # Determina o tipo de ticket baseado no caminho da categoria
         ticket_type, ticket_type_label = determine_ticket_type(path_parts)
         is_incident = 1 if ticket_type == 1 else 0
         is_request = 1 if ticket_type == 2 else 0
-        # Por padrão, não marcamos como problem ou change (pode ser configurado depois se necessário)
         is_problem = 0
         is_change = 0
 
-        try:
-            n8n_result = _notify_n8n_category_approval(
-                suggestion_id=suggestion.id,
-                ticket_id=suggestion.ticket.id,
-                suggested_path=suggestion.suggested_path,
-                parent_glpi_id=parent_glpi_id,
-                category_name=category_name,
-                status='rejected',
-                notes=notes,
-                reviewed_by=reviewed_by,
-                reviewed_at=reviewed_at.isoformat(),
-                is_incident=is_incident,
-                is_request=is_request,
-                is_problem=is_problem,
-                is_change=is_change
-            )
-        except ValueError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        except requests.RequestException:
-            return Response(
-                {"detail": "Falha ao notificar o n8n. Rejeição não foi aplicada."},
-                status=status.HTTP_502_BAD_GATEWAY
-            )
+        _notify_n8n_category_approval(
+            suggestion_id=suggestion.id,
+            ticket_id=suggestion.ticket.id,
+            suggested_path=suggestion.suggested_path,
+            parent_glpi_id=parent_glpi_id,
+            category_name=category_name,
+            status='rejected',
+            notes=notes,
+            reviewed_by=reviewed_by,
+            reviewed_at=reviewed_at.isoformat(),
+            is_incident=is_incident,
+            is_request=is_request,
+            is_problem=is_problem,
+            is_change=is_change
+        )
         
         suggestion.status = 'rejected'
         suggestion.reviewed_at = reviewed_at
@@ -941,16 +881,104 @@ class CategorySuggestionRejectView(APIView):
         
         return Response(
             {
-            "detail": "Sugestão rejeitada",
-                "n8n": n8n_result,
-            "suggestion": {
-                "id": suggestion.id,
-                "suggested_path": suggestion.suggested_path,
-                "status": suggestion.status
-            }
+                "detail": "Sugestão rejeitada",
+                "suggestion": {
+                    "id": suggestion.id,
+                    "suggested_path": suggestion.suggested_path,
+                    "status": suggestion.status
+                }
             },
             status=status.HTTP_200_OK
         )
+
+
+class CategorySuggestionUpdateView(APIView):
+    """
+    Edita uma sugestão de categoria pendente.
+    
+    Endpoint: GET /api/category-suggestions/<id>/ - Retorna detalhes da sugestão
+    Endpoint: PUT /api/category-suggestions/<id>/ - Atualiza sugestão completa
+    Endpoint: PATCH /api/category-suggestions/<id>/ - Atualiza sugestão parcialmente
+    Requer autenticação por token.
+    
+    Permite editar apenas sugestões com status 'pending'.
+    Campos editáveis: suggested_path e notes.
+    
+    Payload esperado:
+        {
+            "suggested_path": "TI > Requisição > Acesso > GLPI > Criação de Usuário / Conta",
+            "notes": "Notas opcionais"
+        }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        """Retorna detalhes da sugestão."""
+        try:
+            suggestion = CategorySuggestion.objects.get(pk=pk)
+        except CategorySuggestion.DoesNotExist:
+            return Response({"detail": "Sugestão não encontrada"}, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response({
+            'id': suggestion.id,
+            'suggested_path': suggestion.suggested_path,
+            'ticket_id': suggestion.ticket.id,
+            'ticket_title': suggestion.ticket_title,
+            'ticket_content': suggestion.ticket_content if suggestion.ticket_content else '',
+            'status': suggestion.status,
+            'notes': suggestion.notes,
+            'created_at': suggestion.created_at,
+            'updated_at': suggestion.updated_at,
+            'reviewed_at': suggestion.reviewed_at,
+            'reviewed_by': suggestion.reviewed_by
+        }, status=status.HTTP_200_OK)
+    
+    def put(self, request, pk):
+        """Atualiza sugestão completa."""
+        return self._update_suggestion(request, pk)
+    
+    def patch(self, request, pk):
+        """Atualiza sugestão parcialmente."""
+        return self._update_suggestion(request, pk)
+    
+    def _update_suggestion(self, request, pk):
+        """Método auxiliar para atualizar sugestão."""
+        try:
+            suggestion = CategorySuggestion.objects.get(pk=pk)
+        except CategorySuggestion.DoesNotExist:
+            return Response({"detail": "Sugestão não encontrada"}, status=status.HTTP_404_NOT_FOUND)
+        
+        if suggestion.status != 'pending':
+            return Response(
+                {"detail": f"Não é possível editar sugestão com status '{suggestion.get_status_display()}'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = CategorySuggestionUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        suggested_path = serializer.validated_data.get('suggested_path', '').strip()
+        notes = serializer.validated_data.get('notes', '').strip()
+        
+        if not suggested_path:
+            return Response(
+                {"detail": "Campo 'suggested_path' é obrigatório e não pode estar vazio."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        suggestion.suggested_path = suggested_path
+        suggestion.notes = notes
+        suggestion.save()
+        
+        return Response({
+            "detail": "Sugestão atualizada com sucesso",
+            "suggestion": {
+                "id": suggestion.id,
+                "suggested_path": suggestion.suggested_path,
+                "notes": suggestion.notes,
+                "status": suggestion.status
+            }
+        }, status=status.HTTP_200_OK)
 
 
 class CategorySuggestionPreviewView(APIView):
@@ -995,13 +1023,13 @@ class CategorySuggestionPreviewView(APIView):
         if result and isinstance(result, dict) and 'suggested_category_name' in result:
             return Response(
                 {
-                "suggested_path": result.get('suggested_category_name', ''),
-                "suggested_category_id": result.get('suggested_category_id'),
-                "ticket_type": result.get('ticket_type'),
-                "ticket_type_label": result.get('ticket_type_label'),
-                "classification_method": "existing_category",
-                "confidence": result.get('confidence', 'high'),
-                "note": "Categoria existente encontrada. Esta é apenas uma prévia."
+                    "suggested_path": result.get('suggested_category_name', ''),
+                    "suggested_category_id": result.get('suggested_category_id'),
+                    "ticket_type": result.get('ticket_type'),
+                    "ticket_type_label": result.get('ticket_type_label'),
+                    "classification_method": "existing_category",
+                    "confidence": result.get('confidence', 'high'),
+                    "note": "Categoria existente encontrada. Esta é apenas uma prévia."
                 },
                 status=status.HTTP_200_OK
             )
@@ -1025,11 +1053,11 @@ class CategorySuggestionPreviewView(APIView):
         
         return Response(
             {
-            "suggested_path": suggested_path,
-            "ticket_type": ticket_type,
-            "ticket_type_label": ticket_type_label,
-            "classification_method": "new_suggestion",
-            "note": "Nova sugestão gerada (categoria não encontrada). Esta é apenas uma prévia."
+                "suggested_path": suggested_path,
+                "ticket_type": ticket_type,
+                "ticket_type_label": ticket_type_label,
+                "classification_method": "new_suggestion",
+                "note": "Nova sugestão gerada (categoria não encontrada). Esta é apenas uma prévia."
             },
             status=status.HTTP_200_OK
         )
@@ -1107,7 +1135,7 @@ class SatisfactionSurveyRateView(APIView):
             survey.comment = comment
             survey.save()
         
-        _notify_n8n_survey(ticket_id, rating, survey.comment)
+        _notify_n8n_survey(ticket_id=ticket_id, rating=rating, comment=survey.comment)
         
         return render(request, 'satisfaction_survey/success.html', {
             'rating': rating,
@@ -1202,7 +1230,7 @@ class SatisfactionSurveyCommentView(APIView):
             survey.comment = comment
             survey.save()
         
-        _notify_n8n_survey(ticket_id, survey.rating, comment)
+        _notify_n8n_survey(ticket_id=ticket_id, rating=survey.rating, comment=comment)
         
         return render(request, 'satisfaction_survey/success.html', {
             'rating': survey.rating,

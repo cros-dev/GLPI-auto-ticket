@@ -23,6 +23,9 @@ export interface CategorySuggestion {
   /** Data de criação da sugestão (formato ISO). */
   created_at: string;
   
+  /** Data de última atualização da sugestão (formato ISO). */
+  updated_at: string;
+  
   /** Data de revisão da sugestão (formato ISO) ou null se ainda não revisada. */
   reviewed_at: string | null;
   

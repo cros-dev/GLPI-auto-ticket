@@ -1,0 +1,137 @@
+.container {
+  max-width: 1200px;
+  margin: 0;
+}
+
+.header {
+  margin-bottom: var(--spacing-lg);
+}
+
+h1 {
+  margin: 0;
+  color: var(--text-color);
+}
+
+.subtitle {
+  margin: var(--spacing-xs) 0 0;
+  color: var(--text-color-secondary);
+}
+
+.card {
+  background-color: var(--app-surface-card);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.card h2 {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--text-color);
+  font-size: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+}
+
+.form-group label {
+  font-weight: 600;
+  color: var(--text-color);
+  font-size: 0.9rem;
+}
+
+.form-group label .required {
+  color: var(--error-color);
+}
+
+.form-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color-subtle);
+}
+
+.error-card {
+  border-left: 4px solid var(--error-color);
+}
+
+.error-message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  color: var(--error-color);
+}
+
+.error-message i {
+  font-size: 1.25rem;
+  margin-top: 2px;
+}
+
+.error-message p {
+  margin: 0;
+  flex: 1;
+}
+
+.result-card {
+  border-left: 4px solid var(--primary-color);
+}
+
+.result-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.result-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-color-subtle);
+}
+
+.result-item:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.result-label {
+  font-weight: 600;
+  color: var(--text-color-secondary);
+  font-size: 0.9rem;
+}
+
+.result-value {
+  color: var(--text-color);
+  font-size: 1rem;
+  word-break: break-word;
+}
+
+.result-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--bg-color);
+  border-radius: var(--border-radius-sm);
+}
+
+.result-note i {
+  color: var(--primary-color);
+  font-size: 1.1rem;
+  margin-top: 2px;
+}
+
+.result-note p {
+  margin: 0;
+  color: var(--text-color-secondary);
+  font-size: 0.9rem;
+  flex: 1;
+}
+

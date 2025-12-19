@@ -70,6 +70,78 @@ export class ApiService {
   }
 
   /**
+   * Obtém detalhes de uma sugestão de categoria específica.
+   * 
+   * @param id - ID da sugestão
+   * @returns Observable com detalhes da sugestão
+   */
+  getCategorySuggestion(id: number): Observable<CategorySuggestion> {
+    const url = `${this.apiUrl}/category-suggestions/${id}/`;
+    return this.http.get<CategorySuggestion>(url);
+  }
+
+  /**
+   * Atualiza uma sugestão de categoria pendente.
+   * 
+   * @param id - ID da sugestão a ser atualizada
+   * @param suggestedPath - Novo caminho da categoria sugerida
+   * @param notes - Notas opcionais sobre a sugestão
+   * @returns Observable com resposta da API
+   */
+  updateCategorySuggestion(
+    id: number,
+    suggestedPath: string,
+    notes?: string
+  ): Observable<any> {
+    const url = `${this.apiUrl}/category-suggestions/${id}/`;
+    const body: any = { suggested_path: suggestedPath };
+    if (notes !== undefined) {
+      body.notes = notes;
+    }
+    return this.http.patch(url, body);
+  }
+
+  /**
+   * Gera uma prévia de sugestão de categoria sem salvar no banco.
+   * 
+   * Útil para testar e validar sugestões antes de criar tickets ou categorias.
+   * Primeiro tenta encontrar uma categoria existente. Se não encontrar, gera uma nova sugestão.
+   * 
+   * @param title - Título do ticket
+   * @param content - Conteúdo/descrição do ticket
+   * @returns Observable com sugestão de categoria (categoria existente ou nova sugestão)
+   * 
+   * @example
+   * ```typescript
+   * this.apiService.previewCategorySuggestion('Título', 'Conteúdo').subscribe(result => {
+   *   console.log('Categoria sugerida:', result.suggested_path);
+   *   console.log('Método:', result.classification_method);
+   * });
+   * ```
+   */
+  previewCategorySuggestion(title: string, content: string): Observable<{
+    suggested_path: string;
+    suggested_category_id?: number;
+    ticket_type?: number;
+    ticket_type_label?: string;
+    classification_method: 'existing_category' | 'new_suggestion';
+    confidence?: string;
+    note: string;
+  }> {
+    const url = `${this.apiUrl}/category-suggestions/preview/`;
+    const body = { title, content };
+    return this.http.post<{
+      suggested_path: string;
+      suggested_category_id?: number;
+      ticket_type?: number;
+      ticket_type_label?: string;
+      classification_method: 'existing_category' | 'new_suggestion';
+      confidence?: string;
+      note: string;
+    }>(url, body);
+  }
+
+  /**
    * Obtém estatísticas agregadas das sugestões de categorias.
    * 
    * @returns Observable com estatísticas (total, pending, approved, rejected)

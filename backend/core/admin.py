@@ -73,7 +73,7 @@ class TicketAdmin(admin.ModelAdmin):
     """
     list_display = ('id', 'name', 'category_name', 'category_suggestion_display', 'satisfaction_survey_display', 'classification_method', 'classification_confidence', 'created_at')
     list_filter = ('created_at', 'classification_method', 'classification_confidence')
-    search_fields = ('name', 'content_html', 'id') 
+    search_fields = ('name', 'content_html', 'id')
     
     readonly_fields = (
         'id',
@@ -109,7 +109,7 @@ class TicketAdmin(admin.ModelAdmin):
         }),
         ('Dados Brutos (Debug)', {
             'fields': ('content_html', 'raw_payload', 'created_at', 'updated_at'),
-            'classes': ('collapse',), 
+            'classes': ('collapse',),
         }),
     )
 
@@ -530,7 +530,7 @@ class SatisfactionSurveyAdmin(admin.ModelAdmin):
             str: Token formatado ou 'Não gerado' se não houver
         """
         if not obj.token:
-            return "Não gerado"
+            return "-"
         # Mostra primeiros 8 e últimos 8 caracteres
         return f"{obj.token[:8]}...{obj.token[-8:]}"
     token_display.short_description = 'Token'

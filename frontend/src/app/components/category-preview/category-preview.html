@@ -1,0 +1,109 @@
+<div class="container">
+  <app-breadcrumb [items]="breadcrumbItems"></app-breadcrumb>
+  
+  <div class="header">
+    <h1>Preview de Categoria</h1>
+    <p class="subtitle">Teste e valide sugestões de categorias antes de criar tickets ou categorias no GLPI.</p>
+  </div>
+
+  <div class="card form-card">
+    <h2>Informações do Ticket</h2>
+    
+    <div class="form-group">
+      <label for="title">Título <span class="required">*</span></label>
+      <input
+        id="title"
+        type="text"
+        pInputText
+        [(ngModel)]="title"
+        [disabled]="loading"
+        placeholder="Ex: Não consigo logar no Anews"
+        class="w-full" />
+    </div>
+
+    <div class="form-group">
+      <label for="content">Conteúdo</label>
+      <textarea
+        id="content"
+        [(ngModel)]="content"
+        [disabled]="loading"
+        [rows]="6"
+        placeholder="Descreva o problema ou solicitação..."
+        class="p-inputtextarea p-inputtext p-component w-full"></textarea>
+    </div>
+
+    <div class="form-actions">
+      <p-button
+        label="Gerar Preview"
+        icon="pi pi-search"
+        severity="primary"
+        [loading]="loading"
+        [disabled]="loading || !title.trim()"
+        (onClick)="generatePreview()">
+      </p-button>
+      <p-button
+        label="Limpar"
+        icon="pi pi-times"
+        severity="secondary"
+        [disabled]="loading"
+        (onClick)="clear()">
+      </p-button>
+    </div>
+  </div>
+
+  <app-loading [loading]="loading" message="Gerando preview da categoria..."></app-loading>
+
+  @if (!loading && error) {
+    <div class="card error-card">
+      <div class="error-message">
+        <i class="pi pi-exclamation-triangle"></i>
+        <p>{{ error }}</p>
+      </div>
+    </div>
+  }
+
+  @if (!loading && previewResult) {
+    <div class="card result-card">
+      <h2>Resultado do Preview</h2>
+      
+      <div class="result-content">
+        <div class="result-item">
+          <span class="result-label">Categoria Sugerida:</span>
+          <span class="result-value">{{ previewResult.suggested_path }}</span>
+        </div>
+
+        <div class="result-item">
+          <span class="result-label">Método:</span>
+          <span class="result-value">{{ translateClassificationMethod(previewResult.classification_method) }}</span>
+        </div>
+
+        @if (previewResult.suggested_category_id) {
+          <div class="result-item">
+            <span class="result-label">ID da Categoria:</span>
+            <span class="result-value">{{ previewResult.suggested_category_id }}</span>
+          </div>
+        }
+
+        @if (previewResult.ticket_type) {
+          <div class="result-item">
+            <span class="result-label">Tipo de Ticket:</span>
+            <span class="result-value">{{ translateTicketType(previewResult.ticket_type) }}</span>
+          </div>
+        }
+
+        @if (previewResult.confidence) {
+          <div class="result-item">
+            <span class="result-label">Confiança:</span>
+            <span class="result-value">{{ translateConfidence(previewResult.confidence) }}</span>
+          </div>
+        }
+
+        <div class="result-note">
+          <i class="pi pi-info-circle"></i>
+          <p>{{ previewResult.note }}</p>
+        </div>
+      </div>
+    </div>
+  }
+</div>
+

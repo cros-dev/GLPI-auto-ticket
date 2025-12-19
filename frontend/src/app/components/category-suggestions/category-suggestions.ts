@@ -1,7 +1,10 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
+import { DialogModule } from 'primeng/dialog';
+import { InputTextModule } from 'primeng/inputtext';
 import { ConfirmationService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil, distinctUntilChanged } from 'rxjs/operators';
@@ -26,7 +29,17 @@ import { ContentDialogComponent } from '../content-dialog/content-dialog.compone
  */
 @Component({
   selector: 'app-category-suggestions',
-  imports: [CommonModule, ButtonModule, BreadcrumbComponent, CategorySuggestionsDashboard, LoadingComponent, ContentDialogComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ButtonModule,
+    DialogModule,
+    InputTextModule,
+    BreadcrumbComponent,
+    CategorySuggestionsDashboard,
+    LoadingComponent,
+    ContentDialogComponent
+  ],
   templateUrl: './category-suggestions.html',
   styleUrl: './category-suggestions.css',
 })
@@ -54,6 +67,21 @@ export class CategorySuggestions implements OnInit, OnDestroy {
 
   /** Título atual do dialog. */
   dialogTitle: string = 'Conteúdo do Ticket';
+
+  /** Controla a visibilidade do dialog de edição. */
+  showEditDialog = false;
+
+  /** Sugestão sendo editada. */
+  editingSuggestion: CategorySuggestion | null = null;
+
+  /** Caminho da categoria sendo editado. */
+  editingSuggestedPath: string = '';
+
+  /** Notas sendo editadas. */
+  editingNotes: string = '';
+
+  /** Indica se está salvando a edição. */
+  savingEdit = false;
 
   /** Subject para gerenciar unsubscribe. */
   private destroy$ = new Subject<void>();
@@ -296,5 +324,81 @@ export class CategorySuggestions implements OnInit, OnDestroy {
     this.dialogTitle = `Conteúdo: ${decodeHtmlEntities(title)}`;
     this.dialogContent = decodeHtmlEntities(content);
     this.showContentDialog = true;
+  }
+
+  /**
+   * Abre o dialog para editar uma sugestão de categoria.
+   * 
+   * @param suggestion - Sugestão a ser editada
+   */
+  openEditDialog(suggestion: CategorySuggestion): void {
+    if (suggestion.status !== 'pending') {
+      this.notificationService.showError('Apenas sugestões pendentes podem ser editadas.', 'Erro');
+      return;
+    }
+
+    this.editingSuggestion = suggestion;
+    this.editingSuggestedPath = suggestion.suggested_path;
+    this.editingNotes = suggestion.notes || '';
+    this.showEditDialog = true;
+  }
+
+  /**
+   * Fecha o dialog de edição sem salvar.
+   */
+  closeEditDialog(): void {
+    this.showEditDialog = false;
+    this.editingSuggestion = null;
+    this.editingSuggestedPath = '';
+    this.editingNotes = '';
+    this.savingEdit = false;
+  }
+
+  /**
+   * Salva as alterações da sugestão editada.
+   */
+  saveEdit(): void {
+    if (!this.editingSuggestion) {
+      return;
+    }
+
+    const suggestedPath = this.editingSuggestedPath.trim();
+    if (!suggestedPath) {
+      this.notificationService.showError('O caminho da categoria é obrigatório.', 'Erro');
+      return;
+    }
+
+    this.savingEdit = true;
+
+    this.apiService.updateCategorySuggestion(
+      this.editingSuggestion.id,
+      suggestedPath,
+      this.editingNotes.trim() || undefined
+    ).pipe(
+      takeUntil(this.destroy$)
+    ).subscribe({
+      next: () => {
+        // Atualiza a sugestão na lista local
+        const index = this.suggestions.findIndex(s => s.id === this.editingSuggestion!.id);
+        if (index !== -1) {
+          this.suggestions[index].suggested_path = suggestedPath;
+          this.suggestions[index].notes = this.editingNotes.trim();
+        }
+        
+        // Limpa o cache para recarregar na próxima vez
+        this.cacheService.delete(`${this.cachePrefix}-${this.currentStatus}`);
+        
+        this.notificationService.showSuccess('Sugestão atualizada com sucesso!');
+        this.closeEditDialog();
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        this.savingEdit = false;
+        const errorInfo = getHttpErrorInfo(err);
+        this.notificationService.showError(errorInfo.message, 'Erro');
+        console.error('Erro ao atualizar sugestão:', err);
+        this.cdr.markForCheck();
+      }
+    });
   }
 }
