@@ -26,14 +26,17 @@ from .serializers import (
     TicketClassificationResponseSerializer,
     SatisfactionSurveySerializer,
     CategorySuggestionReviewSerializer,
-    CategorySuggestionUpdateSerializer
+    CategorySuggestionUpdateSerializer,
+    KnowledgeBaseArticleRequestSerializer,
+    KnowledgeBaseArticleResponseSerializer
 )
 from .utils import clean_html_content
 from .services import (
     classify_ticket,
     classify_ticket_with_gemini,
     generate_category_suggestion,
-    determine_ticket_type
+    determine_ticket_type,
+    generate_knowledge_base_article
 )
 
 logger = logging.getLogger(__name__)
@@ -164,6 +167,215 @@ def _notify_n8n_survey(*, ticket_id, rating, comment):
         logger.error(f"Erro ao notificar n8n: {str(e)}")
 
 
+def _get_glpi_base_url():
+    """
+    Retorna a URL base da API Legacy do GLPI.
+    
+    Returns:
+        str: URL base formatada (ex: "http://172.16.0.180:81/api.php/v1")
+    """
+    glpi_url = getattr(settings, 'GLPI_LEGACY_API_URL', None)
+    if not glpi_url:
+        return None
+    
+    glpi_url = glpi_url.rstrip('/')
+    if glpi_url.endswith('/api.php/v1'):
+        return glpi_url
+    return f"{glpi_url}/api.php/v1"
+
+
+def _get_suggestion_or_404(pk):
+    """
+    Busca uma sugestão de categoria ou retorna erro 404.
+    
+    Args:
+        pk: ID da sugestão
+        
+    Returns:
+        tuple: (suggestion, error_response)
+               suggestion: Instância de CategorySuggestion ou None
+               error_response: Response com erro 404 ou None
+    """
+    try:
+        suggestion = CategorySuggestion.objects.get(pk=pk)
+        return suggestion, None
+    except CategorySuggestion.DoesNotExist:
+        return None, Response(
+            {"detail": "Sugestão não encontrada"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
+def _validate_and_get_suggestion(pk):
+    """
+    Valida e retorna uma sugestão de categoria pendente.
+    
+    Args:
+        pk: ID da sugestão
+        
+    Returns:
+        tuple: (suggestion, error_response)
+               suggestion: Instância de CategorySuggestion ou None
+               error_response: Response com erro ou None
+    """
+    suggestion, error_response = _get_suggestion_or_404(pk)
+    if error_response:
+        return None, error_response
+    
+    if suggestion.status != 'pending':
+        return None, Response(
+            {"detail": f"Sugestão já foi {suggestion.get_status_display().lower()}"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    return suggestion, None
+
+
+def _parse_suggestion_path(suggested_path: str):
+    """
+    Faz parse do caminho sugerido e valida.
+    
+    Args:
+        suggested_path: Caminho completo sugerido
+        
+    Returns:
+        tuple: (category_name, parent_path, error_response)
+               category_name: Nome da categoria ou None
+               parent_path: Caminho do pai ou None
+               error_response: Response com erro ou None
+    """
+    suggested_path = (suggested_path or '').strip()
+    path_parts = [p.strip() for p in suggested_path.split('>') if p.strip()]
+    category_name = path_parts[-1] if path_parts else ''
+    parent_path = ' > '.join(path_parts[:-1]) if len(path_parts) > 1 else ''
+    
+    if not category_name:
+        return None, None, Response(
+            {"detail": "Sugestão inválida: suggested_path vazio ou mal formatado."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    return category_name, parent_path, None
+
+
+def _validate_survey_ticket(ticket_id_str):
+    """
+    Valida e retorna um ticket para pesquisa de satisfação.
+    
+    Args:
+        ticket_id_str: ID do ticket como string
+        
+    Returns:
+        tuple: (ticket, error_context)
+               ticket: Instância de Ticket ou None
+               error_context: Dict com erro para render ou None
+    """
+    try:
+        ticket_id = int(ticket_id_str)
+    except (ValueError, TypeError):
+        return None, {'error': 'ID do ticket inválido.'}
+    
+    try:
+        ticket = Ticket.objects.get(id=ticket_id)
+        return ticket, None
+    except Ticket.DoesNotExist:
+        return None, {'error': f'Ticket #{ticket_id} não encontrado.'}
+
+
+def _validate_survey_token(survey, provided_token):
+    """
+    Valida token de pesquisa de satisfação.
+    
+    Args:
+        survey: Instância de SatisfactionSurvey ou None
+        provided_token: Token fornecido pelo usuário
+        
+    Returns:
+        bool: True se válido, False caso contrário
+    """
+    if not survey or not survey.token:
+        return True  # Sem token, permite acesso
+    
+    if not provided_token or not survey.is_token_valid(provided_token):
+        return False
+    
+    return True
+
+
+def _process_suggestion_review(request, suggestion, new_status, success_message):
+    """
+    Processa aprovação ou rejeição de sugestão de categoria.
+    
+    Args:
+        request: Request HTTP
+        suggestion: Instância de CategorySuggestion
+        new_status: 'approved' ou 'rejected'
+        success_message: Mensagem de sucesso
+        
+    Returns:
+        Response: Resposta HTTP
+    """
+    serializer = CategorySuggestionReviewSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    
+    reviewed_at = timezone.now()
+    reviewed_by = request.user.username if request.user.is_authenticated else 'api'
+    notes = (serializer.validated_data.get('notes') or '').strip()
+    
+    category_name, parent_path, error_response = _parse_suggestion_path(suggestion.suggested_path)
+    if error_response:
+        return error_response
+    
+    parent = _find_category_by_path(parent_path) if parent_path else None
+    if parent_path and not parent:
+        return Response(
+            {"detail": f"Categoria pai não encontrada no espelho local: '{parent_path}'. Sincronize as categorias do GLPI e tente novamente."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    parent_glpi_id = parent.glpi_id if parent else 0
+    path_parts = [p.strip() for p in (suggestion.suggested_path or '').split('>') if p.strip()]
+    ticket_type, ticket_type_label = determine_ticket_type(path_parts)
+    is_incident = 1 if ticket_type == 1 else 0
+    is_request = 1 if ticket_type == 2 else 0
+    is_problem = 0
+    is_change = 0
+    
+    _notify_n8n_category_approval(
+        suggestion_id=suggestion.id,
+        ticket_id=suggestion.ticket.id,
+        suggested_path=suggestion.suggested_path,
+        parent_glpi_id=parent_glpi_id,
+        category_name=category_name,
+        status=new_status,
+        notes=notes,
+        reviewed_by=reviewed_by,
+        reviewed_at=reviewed_at.isoformat(),
+        is_incident=is_incident,
+        is_request=is_request,
+        is_problem=is_problem,
+        is_change=is_change
+    )
+    
+    suggestion.status = new_status
+    suggestion.reviewed_at = reviewed_at
+    suggestion.reviewed_by = reviewed_by
+    suggestion.notes = notes
+    suggestion.save()
+    
+    return Response(
+        {
+            "detail": success_message,
+            "suggestion": {
+                "id": suggestion.id,
+                "suggested_path": suggestion.suggested_path,
+                "status": suggestion.status
+            }
+        },
+        status=status.HTTP_200_OK
+    )
+
+
 def _notify_n8n_category_approval(
     *,
     suggestion_id,
@@ -269,6 +481,8 @@ class GlpiCategorySyncFromApiView(APIView):
         GLPI_LEGACY_API_USER=glpi
         GLPI_LEGACY_API_PASSWORD=senha
         GLPI_LEGACY_APP_TOKEN=token_app (opcional)
+    
+    Nota: A URL será automaticamente formatada para http://172.16.0.180:81/api.php/v1
     """
     permission_classes = [IsAuthenticated]
     
@@ -304,19 +518,13 @@ class GlpiCategorySyncFromApiView(APIView):
         Raises:
             requests.RequestException: Se houver erro na autenticação
         """
-        glpi_url = getattr(settings, 'GLPI_LEGACY_API_URL', None)
         glpi_user = getattr(settings, 'GLPI_LEGACY_API_USER', None)
         glpi_password = getattr(settings, 'GLPI_LEGACY_API_PASSWORD', None)
         glpi_app_token = getattr(settings, 'GLPI_LEGACY_APP_TOKEN', None)
+        base_url = _get_glpi_base_url()
         
-        if not glpi_url or not glpi_user or not glpi_password:
+        if not base_url or not glpi_user or not glpi_password:
             raise ValueError("Configuração da API Legacy do GLPI incompleta. Verifique GLPI_LEGACY_API_URL, GLPI_LEGACY_API_USER e GLPI_LEGACY_API_PASSWORD no .env")
-        
-        glpi_url = glpi_url.rstrip('/')
-        if glpi_url.endswith('/apirest.php'):
-            base_url = glpi_url
-        else:
-            base_url = f"{glpi_url}/apirest.php"
         
         headers = {
             'Content-Type': 'application/json'
@@ -352,15 +560,9 @@ class GlpiCategorySyncFromApiView(APIView):
             requests.RequestException: Se houver erro na requisição
             ValueError: Se houver erro ao processar os dados
         """
-        glpi_url = getattr(settings, 'GLPI_LEGACY_API_URL', None)
-        if not glpi_url:
+        base_url = _get_glpi_base_url()
+        if not base_url:
             raise ValueError("GLPI_LEGACY_API_URL não configurado")
-        
-        glpi_url = glpi_url.rstrip('/')
-        if glpi_url.endswith('/apirest.php'):
-            base_url = glpi_url
-        else:
-            base_url = f"{glpi_url}/apirest.php"
         
         session_token = self._get_session_token()
         
@@ -715,83 +917,10 @@ class CategorySuggestionApproveView(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request, pk):
-        try:
-            suggestion = CategorySuggestion.objects.get(pk=pk)
-        except CategorySuggestion.DoesNotExist:
-            return Response({"detail": "Sugestão não encontrada"}, status=status.HTTP_404_NOT_FOUND)
-        
-        if suggestion.status != 'pending':
-            return Response(
-                {"detail": f"Sugestão já foi {suggestion.get_status_display().lower()}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        serializer = CategorySuggestionReviewSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        reviewed_at = timezone.now()
-        reviewed_by = request.user.username if request.user.is_authenticated else 'api'
-        notes = (serializer.validated_data.get('notes') or '').strip()
-
-        suggested_path = (suggestion.suggested_path or '').strip()
-        path_parts = [p.strip() for p in suggested_path.split('>') if p.strip()]
-        category_name = path_parts[-1] if path_parts else ''
-        parent_path = ' > '.join(path_parts[:-1]) if len(path_parts) > 1 else ''
-        
-        if not category_name:
-            return Response(
-                {"detail": "Sugestão inválida: suggested_path vazio ou mal formatado."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        parent = _find_category_by_path(parent_path) if parent_path else None
-        if parent_path and not parent:
-            return Response(
-                {"detail": f"Categoria pai não encontrada no espelho local: '{parent_path}'. Sincronize as categorias do GLPI e tente novamente."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        parent_glpi_id = parent.glpi_id if parent else 0
-        
-        ticket_type, ticket_type_label = determine_ticket_type(path_parts)
-        is_incident = 1 if ticket_type == 1 else 0
-        is_request = 1 if ticket_type == 2 else 0
-        is_problem = 0
-        is_change = 0
-
-        _notify_n8n_category_approval(
-            suggestion_id=suggestion.id,
-            ticket_id=suggestion.ticket.id,
-            suggested_path=suggestion.suggested_path,
-            parent_glpi_id=parent_glpi_id,
-            category_name=category_name,
-            status='approved',
-            notes=notes,
-            reviewed_by=reviewed_by,
-            reviewed_at=reviewed_at.isoformat(),
-            is_incident=is_incident,
-            is_request=is_request,
-            is_problem=is_problem,
-            is_change=is_change
-        )
-        
-        suggestion.status = 'approved'
-        suggestion.reviewed_at = reviewed_at
-        suggestion.reviewed_by = reviewed_by
-        suggestion.notes = notes
-        suggestion.save()
-        
-        return Response(
-            {
-                "detail": "Sugestão aprovada",
-                "suggestion": {
-                    "id": suggestion.id,
-                    "suggested_path": suggestion.suggested_path,
-                    "status": suggestion.status
-                }
-            },
-            status=status.HTTP_200_OK
-        )
+        suggestion, error_response = _validate_and_get_suggestion(pk)
+        if error_response:
+            return error_response
+        return _process_suggestion_review(request, suggestion, 'approved', "Sugestão aprovada")
 
 
 class CategorySuggestionRejectView(APIView):
@@ -813,83 +942,10 @@ class CategorySuggestionRejectView(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request, pk):
-        try:
-            suggestion = CategorySuggestion.objects.get(pk=pk)
-        except CategorySuggestion.DoesNotExist:
-            return Response({"detail": "Sugestão não encontrada"}, status=status.HTTP_404_NOT_FOUND)
-        
-        if suggestion.status != 'pending':
-            return Response(
-                {"detail": f"Sugestão já foi {suggestion.get_status_display().lower()}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        serializer = CategorySuggestionReviewSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        reviewed_at = timezone.now()
-        reviewed_by = request.user.username if request.user.is_authenticated else 'api'
-        notes = (serializer.validated_data.get('notes') or '').strip()
-
-        suggested_path = (suggestion.suggested_path or '').strip()
-        path_parts = [p.strip() for p in suggested_path.split('>') if p.strip()]
-        category_name = path_parts[-1] if path_parts else ''
-        parent_path = ' > '.join(path_parts[:-1]) if len(path_parts) > 1 else ''
-        
-        if not category_name:
-            return Response(
-                {"detail": "Sugestão inválida: suggested_path vazio ou mal formatado."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        parent = _find_category_by_path(parent_path) if parent_path else None
-        if parent_path and not parent:
-            return Response(
-                {"detail": f"Categoria pai não encontrada no espelho local: '{parent_path}'. Sincronize as categorias do GLPI e tente novamente."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        parent_glpi_id = parent.glpi_id if parent else 0
-        
-        ticket_type, ticket_type_label = determine_ticket_type(path_parts)
-        is_incident = 1 if ticket_type == 1 else 0
-        is_request = 1 if ticket_type == 2 else 0
-        is_problem = 0
-        is_change = 0
-
-        _notify_n8n_category_approval(
-            suggestion_id=suggestion.id,
-            ticket_id=suggestion.ticket.id,
-            suggested_path=suggestion.suggested_path,
-            parent_glpi_id=parent_glpi_id,
-            category_name=category_name,
-            status='rejected',
-            notes=notes,
-            reviewed_by=reviewed_by,
-            reviewed_at=reviewed_at.isoformat(),
-            is_incident=is_incident,
-            is_request=is_request,
-            is_problem=is_problem,
-            is_change=is_change
-        )
-        
-        suggestion.status = 'rejected'
-        suggestion.reviewed_at = reviewed_at
-        suggestion.reviewed_by = reviewed_by
-        suggestion.notes = notes
-        suggestion.save()
-        
-        return Response(
-            {
-                "detail": "Sugestão rejeitada",
-                "suggestion": {
-                    "id": suggestion.id,
-                    "suggested_path": suggestion.suggested_path,
-                    "status": suggestion.status
-                }
-            },
-            status=status.HTTP_200_OK
-        )
+        suggestion, error_response = _validate_and_get_suggestion(pk)
+        if error_response:
+            return error_response
+        return _process_suggestion_review(request, suggestion, 'rejected', "Sugestão rejeitada")
 
 
 class CategorySuggestionUpdateView(APIView):
@@ -914,10 +970,9 @@ class CategorySuggestionUpdateView(APIView):
     
     def get(self, request, pk):
         """Retorna detalhes da sugestão."""
-        try:
-            suggestion = CategorySuggestion.objects.get(pk=pk)
-        except CategorySuggestion.DoesNotExist:
-            return Response({"detail": "Sugestão não encontrada"}, status=status.HTTP_404_NOT_FOUND)
+        suggestion, error_response = _get_suggestion_or_404(pk)
+        if error_response:
+            return error_response
         
         return Response({
             'id': suggestion.id,
@@ -943,10 +998,9 @@ class CategorySuggestionUpdateView(APIView):
     
     def _update_suggestion(self, request, pk):
         """Método auxiliar para atualizar sugestão."""
-        try:
-            suggestion = CategorySuggestion.objects.get(pk=pk)
-        except CategorySuggestion.DoesNotExist:
-            return Response({"detail": "Sugestão não encontrada"}, status=status.HTTP_404_NOT_FOUND)
+        suggestion, error_response = _get_suggestion_or_404(pk)
+        if error_response:
+            return error_response
         
         if suggestion.status != 'pending':
             return Response(
@@ -1082,11 +1136,10 @@ class SatisfactionSurveyRateView(APIView):
     def get(self, request, ticket_id, rating):
         """Processa avaliação direta e salva."""
         try:
-            ticket_id = int(ticket_id)
             rating = int(rating)
         except (ValueError, TypeError):
             return render(request, 'satisfaction_survey/success.html', {
-                'error': 'Parâmetros inválidos.',
+                'error': 'Rating inválido.',
                 'rating': None
             }, status=status.HTTP_400_BAD_REQUEST)
         
@@ -1096,24 +1149,21 @@ class SatisfactionSurveyRateView(APIView):
                 'rating': None
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        try:
-            ticket = Ticket.objects.get(id=ticket_id)
-        except Ticket.DoesNotExist:
+        ticket, error_context = _validate_survey_ticket(ticket_id)
+        if error_context:
             return render(request, 'satisfaction_survey/success.html', {
-                'error': f'Ticket #{ticket_id} não encontrado.',
+                **error_context,
                 'rating': None
-            }, status=status.HTTP_404_NOT_FOUND)
+            }, status=status.HTTP_404_NOT_FOUND if 'não encontrado' in error_context.get('error', '') else status.HTTP_400_BAD_REQUEST)
         
         existing_survey = SatisfactionSurvey.objects.filter(ticket=ticket).first()
         provided_token = request.GET.get('token', '').strip()
         
-        if existing_survey:
-            if existing_survey.token:
-                if not provided_token or not existing_survey.is_token_valid(provided_token):
-                    return render(request, 'satisfaction_survey/success.html', {
-                        'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
-                        'rating': None
-                    }, status=status.HTTP_403_FORBIDDEN)
+        if existing_survey and not _validate_survey_token(existing_survey, provided_token):
+            return render(request, 'satisfaction_survey/success.html', {
+                'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
+                'rating': None
+            }, status=status.HTTP_403_FORBIDDEN)
             
             existing_survey.rating = rating
             if not existing_survey.token:
@@ -1157,29 +1207,19 @@ class SatisfactionSurveyCommentView(APIView):
     
     def get(self, request, ticket_id):
         """Renderiza formulário para adicionar comentário."""
-        try:
-            ticket_id = int(ticket_id)
-        except (ValueError, TypeError):
-            return render(request, 'satisfaction_survey/comment.html', {
-                'error': 'ID do ticket inválido.'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            ticket = Ticket.objects.get(id=ticket_id)
-        except Ticket.DoesNotExist:
-            return render(request, 'satisfaction_survey/comment.html', {
-                'error': f'Ticket #{ticket_id} não encontrado.'
-            }, status=status.HTTP_404_NOT_FOUND)
+        ticket, error_context = _validate_survey_ticket(ticket_id)
+        if error_context:
+            return render(request, 'satisfaction_survey/comment.html', error_context,
+                        status=status.HTTP_404_NOT_FOUND if 'não encontrado' in error_context.get('error', '') else status.HTTP_400_BAD_REQUEST)
         
         survey = SatisfactionSurvey.objects.filter(ticket=ticket).first()
         provided_token = request.GET.get('token', '').strip()
         
-        if survey and survey.token:
-            if not provided_token or not survey.is_token_valid(provided_token):
-                return render(request, 'satisfaction_survey/comment.html', {
-                    'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
-                    'ticket': ticket
-                }, status=status.HTTP_403_FORBIDDEN)
+        if not _validate_survey_token(survey, provided_token):
+            return render(request, 'satisfaction_survey/comment.html', {
+                'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
+                'ticket': ticket
+            }, status=status.HTTP_403_FORBIDDEN)
         
         context = {
             'ticket': ticket,
@@ -1192,32 +1232,22 @@ class SatisfactionSurveyCommentView(APIView):
     
     def post(self, request, ticket_id):
         """Salva comentário na pesquisa."""
-        try:
-            ticket_id = int(ticket_id)
-        except (ValueError, TypeError):
-            return render(request, 'satisfaction_survey/comment.html', {
-                'error': 'ID do ticket inválido.'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            ticket = Ticket.objects.get(id=ticket_id)
-        except Ticket.DoesNotExist:
-            return render(request, 'satisfaction_survey/comment.html', {
-                'error': f'Ticket #{ticket_id} não encontrado.'
-            }, status=status.HTTP_404_NOT_FOUND)
+        ticket, error_context = _validate_survey_ticket(ticket_id)
+        if error_context:
+            return render(request, 'satisfaction_survey/comment.html', error_context,
+                        status=status.HTTP_404_NOT_FOUND if 'não encontrado' in error_context.get('error', '') else status.HTTP_400_BAD_REQUEST)
         
         comment = request.POST.get('comment', '').strip()
         provided_token = request.POST.get('token', request.GET.get('token', '')).strip()
         
         survey = SatisfactionSurvey.objects.filter(ticket=ticket).first()
         
-        if survey and survey.token:
-            if not provided_token or not survey.is_token_valid(provided_token):
-                return render(request, 'satisfaction_survey/comment.html', {
-                    'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
-                    'ticket': ticket,
-                    'survey': survey
-                }, status=status.HTTP_403_FORBIDDEN)
+        if not _validate_survey_token(survey, provided_token):
+            return render(request, 'satisfaction_survey/comment.html', {
+                'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
+                'ticket': ticket,
+                'survey': survey
+            }, status=status.HTTP_403_FORBIDDEN)
         
         if not survey:
             survey = SatisfactionSurvey.objects.create(
@@ -1240,3 +1270,76 @@ class SatisfactionSurveyCommentView(APIView):
             'comment': comment,
             'token': survey.token
         })
+
+
+class KnowledgeBaseArticleView(APIView):
+    """
+    View para geração de artigos de Base de Conhecimento usando IA.
+    
+    Endpoint: POST /api/knowledge-base/article/
+    
+    Requer autenticação.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """
+        Gera um artigo de Base de Conhecimento baseado nos parâmetros fornecidos.
+        
+        Body esperado:
+        {
+            "article_type": "conceitual" | "operacional" | "troubleshooting",
+            "category": "RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout",
+            "context": "Descrição do ambiente, sistemas, servidores..."
+        }
+        
+        Retorna:
+        {
+            "article": "Texto completo do artigo gerado",
+            "article_type": "conceitual",
+            "category": "RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout"
+        }
+        """
+        serializer = KnowledgeBaseArticleRequestSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response(
+                {'error': 'Dados inválidos', 'details': serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        article_type = serializer.validated_data['article_type']
+        category = serializer.validated_data['category']
+        context = serializer.validated_data['context']
+        
+        logger.info(f"Geração de artigo de Base de Conhecimento solicitada. Tipo: {article_type}, Categoria: {category}")
+        
+        result = generate_knowledge_base_article(
+            article_type=article_type,
+            category=category,
+            context=context
+        )
+        
+        if result is None:
+            return Response(
+                {'error': 'Geração não disponível', 'message': 'A API do Gemini não está configurada ou não está disponível'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        if isinstance(result, dict) and 'error' in result:
+            error_message = result.get('message', 'Erro desconhecido ao gerar artigo')
+            error_type = result.get('error', 'unknown_error')
+            
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+            if error_type in ['invalid_article_type', 'missing_category', 'missing_context']:
+                status_code = status.HTTP_400_BAD_REQUEST
+            elif error_type == 'library_not_installed':
+                status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            
+            return Response(
+                {'error': error_type, 'message': error_message},
+                status=status_code
+            )
+        
+        response_serializer = KnowledgeBaseArticleResponseSerializer(result)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)

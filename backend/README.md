@@ -359,7 +359,7 @@ Configure as seguintes variáveis de ambiente no arquivo `.env` (incluído no `.
 - `DJANGO_DEBUG` — True/False
 - `DJANGO_ALLOWED_HOSTS` — hosts separados por vírgula
 - `GEMINI_API_KEY` — chave para Google Gemini API (opcional, para classificação com IA)
-- `GLPI_LEGACY_API_URL` — URL da API Legacy do GLPI (ex: `http://172.16.0.180:81/apirest.php`)
+- `GLPI_LEGACY_API_URL` — URL da API Legacy do GLPI (ex: `http://172.16.0.180:81` - será formatado automaticamente para `/api.php/v1`)
 - `GLPI_LEGACY_API_USER` — usuário para autenticação na API Legacy
 - `GLPI_LEGACY_API_PASSWORD` — senha para autenticação na API Legacy
 - `GLPI_LEGACY_APP_TOKEN` — token do aplicativo (opcional, se configurado no GLPI)

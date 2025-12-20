@@ -79,6 +79,11 @@ export class SidenavComponent implements OnInit, OnDestroy {
         label: 'Sincronização',
         icon: 'pi pi-refresh',
         routerLink: ['/sync']
+      },
+      {
+        label: 'Base de Conhecimento',
+        icon: 'pi pi-book',
+        routerLink: ['/knowledge-base']
       }
     ];
   }

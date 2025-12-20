@@ -1,0 +1,115 @@
+<div class="container">
+  <app-breadcrumb [items]="breadcrumbItems"></app-breadcrumb>
+  
+  <div class="header">
+    <h1>Base de Conhecimento</h1>
+    <p class="subtitle">Gere artigos de Base de Conhecimento usando Google Gemini AI para documentação técnica.</p>
+  </div>
+
+  <div class="card">
+    <h2>Informações do Artigo</h2>
+    
+    <div class="form-group">
+      <label for="article-type">Tipo do Artigo <span class="required">*</span></label>
+      <select
+        id="article-type"
+        [(ngModel)]="articleType"
+        [disabled]="loading"
+        class="p-inputtext p-component w-full">
+        <option [value]="null" disabled>Selecione o tipo do artigo</option>
+        <option value="conceitual">Conceitual</option>
+        <option value="operacional">Operacional</option>
+        <option value="troubleshooting">Troubleshooting</option>
+      </select>
+      <small class="form-hint">
+        <strong>Conceitual:</strong> Documenta arquitetura e conceitos. 
+        <strong>Operacional:</strong> Procedimentos passo a passo. 
+        <strong>Troubleshooting:</strong> Diagnóstico e solução de problemas.
+      </small>
+    </div>
+
+    <div class="form-group">
+      <label for="category">Categoria <span class="required">*</span></label>
+      <input
+        id="category"
+        type="text"
+        pInputText
+        [(ngModel)]="category"
+        [disabled]="loading"
+        placeholder="Ex: RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout"
+        class="w-full" />
+      <small class="form-hint">Caminho completo da categoria na Base de Conhecimento do GLPI</small>
+    </div>
+
+    <div class="form-group">
+      <label for="context">Contexto <span class="required">*</span></label>
+      <textarea
+        id="context"
+        [(ngModel)]="context"
+        [disabled]="loading"
+        [rows]="8"
+        placeholder="Descreva o ambiente, sistemas, servidores, softwares envolvidos, configurações, etc..."
+        class="w-full"></textarea>
+      <small class="form-hint">Informações detalhadas sobre o ambiente e sistemas que serão documentados no artigo</small>
+    </div>
+
+    <div class="form-actions">
+      <p-button
+        label="Gerar Artigo"
+        icon="pi pi-file-edit"
+        severity="primary"
+        [loading]="loading"
+        [disabled]="loading || !articleType || !category.trim() || !context.trim()"
+        (onClick)="generateArticle()">
+      </p-button>
+      <p-button
+        label="Limpar"
+        icon="pi pi-times"
+        severity="secondary"
+        [disabled]="loading"
+        (onClick)="clear()">
+      </p-button>
+    </div>
+  </div>
+
+  <app-loading [loading]="loading" message="Gerando artigo de Base de Conhecimento..."></app-loading>
+
+  @if (!loading && error) {
+    <div class="card error-card">
+      <div class="error-message">
+        <i class="pi pi-exclamation-triangle"></i>
+        <p>{{ error }}</p>
+      </div>
+    </div>
+  }
+
+  @if (!loading && articleResult) {
+    <div class="card result-card">
+      <div class="result-header">
+        <h2>Artigo Gerado</h2>
+        <div class="result-meta">
+          <span class="meta-item">
+            <strong>Tipo:</strong> {{ translateArticleType(articleResult.article_type) }}
+          </span>
+          <span class="meta-item">
+            <strong>Categoria:</strong> {{ articleResult.category }}
+          </span>
+        </div>
+      </div>
+      
+      <div class="result-actions">
+        <p-button
+          label="Copiar Artigo"
+          icon="pi pi-copy"
+          severity="secondary"
+          (onClick)="copyArticle()">
+        </p-button>
+      </div>
+
+      <div class="result-content">
+        <div class="article-text" [innerHTML]="getArticleHtml()"></div>
+      </div>
+    </div>
+  }
+</div>
+

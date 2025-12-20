@@ -8,6 +8,7 @@ Este módulo contém todos os serializers usados para:
 """
 from rest_framework import serializers
 from .models import Ticket, GlpiCategory, SatisfactionSurvey
+from .services import VALID_ARTICLE_TYPES
 
 
 # =========================================================
@@ -211,3 +212,39 @@ class CategorySuggestionUpdateSerializer(serializers.Serializer):
         allow_blank=True,
         help_text="Notas adicionais sobre a sugestão"
     )
+
+
+class KnowledgeBaseArticleRequestSerializer(serializers.Serializer):
+    """
+    Serializer para requisição de geração de artigo de Base de Conhecimento.
+    
+    Campos:
+        article_type: Tipo do artigo ('conceitual', 'operacional' ou 'troubleshooting')
+        category: Categoria da Base de Conhecimento
+        context: Contexto do ambiente, sistemas, servidores, softwares envolvidos
+    """
+    article_type = serializers.ChoiceField(
+        choices=VALID_ARTICLE_TYPES,
+        help_text=f"Tipo do artigo: {', '.join(VALID_ARTICLE_TYPES)}"
+    )
+    category = serializers.CharField(
+        max_length=512,
+        help_text="Categoria da Base de Conhecimento (ex: 'RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout')"
+    )
+    context = serializers.CharField(
+        help_text="Contexto do ambiente, sistemas, servidores, softwares envolvidos"
+    )
+
+
+class KnowledgeBaseArticleResponseSerializer(serializers.Serializer):
+    """
+    Serializer para resposta de geração de artigo de Base de Conhecimento.
+    
+    Campos:
+        article: Texto completo do artigo gerado
+        article_type: Tipo do artigo gerado
+        category: Categoria informada
+    """
+    article = serializers.CharField(help_text="Texto completo do artigo gerado")
+    article_type = serializers.CharField(help_text="Tipo do artigo gerado")
+    category = serializers.CharField(help_text="Categoria da Base de Conhecimento")

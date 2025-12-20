@@ -7,7 +7,8 @@ Google Gemini AI.
 import logging
 from typing import Optional, Dict, Tuple, List
 from django.conf import settings
-from .models import GlpiCategory, CategorySuggestion, Ticket 
+from .models import GlpiCategory, CategorySuggestion, Ticket
+from .prompts import get_classification_prompt, get_suggestion_prompt, get_knowledge_base_prompt 
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +34,58 @@ GENERIC_CATEGORIES = [
     'equipamentos', 'hardware', 'software', 'sistemas', 'acesso'
 ]
 
+VALID_ARTICLE_TYPES = ['conceitual', 'operacional', 'troubleshooting']
+
 
 # =========================================================
 # FUNÇÕES AUXILIARES
 # =========================================================
+
+def _get_gemini_client():
+    """
+    Cria e retorna o cliente do Google Gemini AI.
+    
+    Returns:
+        Optional[genai.Client]: Cliente Gemini ou None se API key não estiver configurada
+    """
+    api_key = getattr(settings, 'GEMINI_API_KEY', None)
+    if not api_key:
+        return None
+    
+    try:
+        from google import genai
+        return genai.Client(api_key=api_key)
+    except ImportError:
+        logger.warning("Biblioteca google-genai não instalada")
+        return None
+
+
+def _call_gemini_api(client, prompt: str, model: str = "gemini-2.5-flash") -> Optional[str]:
+    """
+    Faz chamada à API do Gemini e retorna a resposta processada.
+    
+    Args:
+        client: Cliente Gemini
+        prompt: Prompt a ser enviado
+        model: Modelo a ser usado (padrão: gemini-2.5-flash)
+        
+    Returns:
+        Optional[str]: Resposta processada ou None em caso de erro
+    """
+    if not client:
+        return None
+    
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt
+        )
+        return response.text.strip() if response.text else None
+    except Exception as e:
+        error_type, error_message = _parse_gemini_error(e)
+        logger.warning(f"Erro ao chamar API do Gemini: {error_type} - {str(e)}")
+        return None
+
 
 def _parse_gemini_error(exception: Exception) -> Tuple[str, str]:
     """
@@ -177,6 +226,42 @@ def _mentions_system(ticket_text: str) -> bool:
     return any(system in ticket_text for system in SYSTEMS)
 
 
+def _find_similar_category(
+    ticket_text: str,
+    search_terms: List[str],
+    min_levels: int = 5,
+    path_filters: Optional[List[str]] = None
+) -> Optional[str]:
+    """
+    Busca categoria existente que contém termos de busca específicos.
+    
+    Args:
+        ticket_text: Texto do ticket em minúsculas
+        search_terms: Lista de termos para buscar nas categorias
+        min_levels: Número mínimo de níveis da categoria
+        path_filters: Lista de filtros opcionais para aplicar no caminho da categoria
+        
+    Returns:
+        Optional[str]: Caminho completo da categoria encontrada ou None
+    """
+    for term in search_terms:
+        if term in ticket_text:
+            categories = GlpiCategory.objects.filter(full_path__icontains=term)
+            for cat in categories:
+                path = get_category_path(cat)
+                if len(path) >= min_levels:
+                    full_path = ' > '.join(path)
+                    
+                    if path_filters:
+                        full_path_lower = full_path.lower()
+                        if not any(filter_term in full_path_lower for filter_term in path_filters):
+                            continue
+                    
+                    logger.info(f"Categoria similar encontrada: {full_path}")
+                    return full_path
+    return None
+
+
 def _find_similar_category_by_systems(ticket_text: str, min_levels: int = 5) -> Optional[str]:
     """
     Busca categoria existente que menciona sistemas do ticket.
@@ -188,21 +273,8 @@ def _find_similar_category_by_systems(ticket_text: str, min_levels: int = 5) -> 
     Returns:
         Optional[str]: Caminho completo da categoria encontrada ou None
     """
-    for system in SYSTEMS:
-        if system in ticket_text:
-            categories = GlpiCategory.objects.filter(full_path__icontains=system)
-            for cat in categories:
-                path = get_category_path(cat)
-                if len(path) >= min_levels:
-                    full_path = ' > '.join(path)
-                    full_path_lower = full_path.lower()
-                    if ('problema de acesso' in full_path_lower or 
-                        'indisponibilidade de sistema' in full_path_lower or
-                        'falha em processo' in full_path_lower or
-                        'requisição' in full_path_lower):
-                        logger.info(f"Categoria similar encontrada: {full_path}")
-                        return full_path
-    return None
+    filters = ['problema de acesso', 'indisponibilidade de sistema', 'falha em processo', 'requisição']
+    return _find_similar_category(ticket_text, SYSTEMS, min_levels, filters)
 
 
 def _find_similar_category_by_events(ticket_text: str, min_levels: int = 5) -> Optional[str]:
@@ -216,20 +288,8 @@ def _find_similar_category_by_events(ticket_text: str, min_levels: int = 5) -> O
     Returns:
         Optional[str]: Caminho completo da categoria encontrada ou None
     """
-    for keyword in EVENT_KEYWORDS:
-        if keyword in ticket_text:
-            categories = GlpiCategory.objects.filter(full_path__icontains=keyword)
-            for cat in categories:
-                path = get_category_path(cat)
-                if len(path) >= min_levels:
-                    full_path = ' > '.join(path)
-                    full_path_lower = full_path.lower()
-                    if ('montagem de setup' in full_path_lower or 
-                        'transmissão' in full_path_lower or 
-                        'video conferência' in full_path_lower):
-                        logger.info(f"Categoria de evento/montagem encontrada: {full_path}")
-                        return full_path
-    return None
+    filters = ['montagem de setup', 'transmissão', 'video conferência']
+    return _find_similar_category(ticket_text, EVENT_KEYWORDS, min_levels, filters)
 
 
 def _get_similar_categories_for_reference(ticket_text: str) -> List[str]:
@@ -244,7 +304,6 @@ def _get_similar_categories_for_reference(ticket_text: str) -> List[str]:
     """
     similar_categories = []
     
-    # Busca por sistemas mencionados
     for system in SYSTEMS:
         if system in ticket_text:
             for cat in GlpiCategory.objects.filter(full_path__icontains=system):
@@ -252,7 +311,6 @@ def _get_similar_categories_for_reference(ticket_text: str) -> List[str]:
                 if len(path) >= 4:
                     similar_categories.append(' > '.join(path))
     
-    # Busca por palavras-chave de eventos/montagem
     for keyword in EVENT_KEYWORDS:
         if keyword in ticket_text:
             for cat in GlpiCategory.objects.filter(full_path__icontains=keyword):
@@ -288,135 +346,15 @@ def classify_ticket_with_gemini(
             - 'confidence': 'high' ou 'medium'
         Retorna None se houver erro ou se a API não estiver configurada.
     """
-    api_key = getattr(settings, 'GEMINI_API_KEY', None)
-    
-    if not api_key:
+    client = _get_gemini_client()
+    if not client:
         logger.debug("GEMINI_API_KEY não configurada, classificação será ignorada")
         return None
     
     try:
-        from google import genai
-        client = genai.Client(api_key=api_key)
-        
         categories_text = get_categories_for_ai()
-        
-        prompt = f"""Você é um assistente especializado em classificação de tickets de suporte técnico.
-
-Categorias disponíveis (formato: Nível 1 > Nível 2 > Nível 3 > ...):
-{categories_text}
-
-Analise o seguinte ticket e classifique-o na categoria MAIS ESPECÍFICA e APROPRIADA da lista acima.
-
-REGRAS CRÍTICAS: 
-- SEMPRE prefira categorias com MAIS NÍVEIS (mais específicas) quando disponíveis
-- Se o ticket menciona um sistema/aplicação específico (ex: Anews, Arion, GLPI, AD, etc.), DEVE usar uma categoria que inclua esse sistema
-- NUNCA escolha uma categoria genérica se existir uma subcategoria mais específica que se encaixe melhor
-- Se encontrar uma categoria de nível 4 ou 5 que se encaixa, mas há uma subcategoria de nível 5 ou 6 que menciona o sistema/aplicação do ticket, USE A SUBCATEGORIA MAIS ESPECÍFICA
-- USE O NOME EXATO da categoria da lista acima - NÃO invente ou modifique nomes de sistemas/aplicações
-- Se existe "Anews / Arion" na lista, USE "Anews / Arion" - NÃO use apenas "Anews" ou "Arion"
-
-DISTINÇÕES CRÍTICAS ENTRE TIPOS DE PROBLEMA:
-
-1. "Problema de Acesso" = usuário não consegue acessar/login (credencial inválida, senha errada, permissão negada, bloqueio de conta, etc.) - o sistema está funcionando, mas o usuário específico não consegue entrar
-   - Palavras-chave: "credencial inválida", "não consegui logar", "senha não funciona", "acesso negado", "conta bloqueada"
-   - Use: "TI > Incidente > Sistemas > Problema de Acesso > [Sistema EXATO da lista]"
-   - IMPORTANTE: Se o sistema é "Anews", use "Anews" (não "Anews / Arion") conforme a lista
-
-2. "Indisponibilidade de Sistema" = sistema está fora do ar, não está funcionando, inacessível para todos - problema de infraestrutura/servidor/redes
-   - Palavras-chave: "sistema fora do ar", "indisponível", "não está funcionando", "erro ao acessar" (sem mencionar credencial), "servidor não responde", "sistema down"
-   - Use: "TI > Incidente > Sistemas > Indisponibilidade de Sistema > [Sistema EXATO da lista]"
-   - IMPORTANTE: Se o sistema é "Anews / Arion", use "Anews / Arion" conforme a lista
-
-3. "Falha em Processo" = sistema funciona normalmente, mas um processo específico dentro do sistema falha (ex: processo de RP, processo de Salesforce)
-   - Palavras-chave: "processo não funciona", "falha no processo", "erro no processo", "processo travado"
-   - Use: "TI > Incidente > Sistemas > Falha em Processo > [Sistema específico: RP, Salesforce, Outros]"
-
-4. "Problema Geral de Sistema" = categoria genérica - EVITE quando há categorias mais específicas disponíveis
-   - Só use se realmente não houver categoria mais específica que se encaixe
-
-5. "Outros" = categoria genérica - SEMPRE EVITE quando há categorias específicas disponíveis
-
-- Exemplos de categorias genéricas a EVITAR quando há subcategorias: "Problema de Acesso" (sem sistema), "Indisponibilidade de Sistema" (sem sistema), "Problema Geral de Sistema", "Outros", "Hardware" (sem tipo específico)
-
-DISTINÇÕES PARA REQUISIÇÕES:
-
-1. "Requisição > Acesso" = acesso a INFRAESTRUTURA (AD, VPN, Rede, Pastas de Rede)
-   - "Requisição > Acesso > AD > Liberação de Rede / Wi-Fi" = solicitação de LIBERAÇÃO/PERMISSÃO de acesso Wi-Fi (não é instalação física)
-   - Use para: criar usuário AD, liberar acesso Wi-Fi (permissão), acesso VPN, acesso a pastas de rede
-   - Palavras-chave: "criar usuário AD", "liberar Wi-Fi", "liberar rede", "permissão Wi-Fi", "acesso VPN", "pasta de rede"
-   - IMPORTANTE: Distinga de "Requisição > Equipamentos > Hardware > Infraestrutura de Rede" (instalação física de cabo/ponto/equipamento)
-
-2. "Requisição > Sistemas > Acesso a Sistema" = acesso a SISTEMAS/APLICAÇÕES específicos (Anews, Salesforce, RP, etc.)
-   - Use para: solicitar acesso a sistemas/aplicações específicos
-   - Palavras-chave: "acesso ao sistema", "solicitar acesso", "permissão no sistema"
-   - IMPORTANTE: Distinga entre acesso a infraestrutura (AD/rede) e acesso a sistemas/aplicações (Anews, Salesforce, etc.)
-
-3. "Requisição > Equipamentos" = solicitação de equipamentos (novo, reparo, substituição, mudança de local)
-   - "Requisição > Equipamentos > Hardware > Infraestrutura de Rede > Novo Ponto de Rede" = solicitar instalação de novo ponto de rede (cabo físico)
-   - "Requisição > Equipamentos > Hardware > Infraestrutura de Rede > Instalação / Substituição de Equipamento" = solicitar instalação/substituição de equipamento de rede (switch, roteador, cabo)
-   - Use para: solicitar novo equipamento, reparo, substituição, mudança de local, instalação de cabo de rede, novo ponto de rede
-   - Palavras-chave: "novo equipamento", "preciso de", "solicitar", "reparo", "substituição", "cabo de rede", "ponto de rede", "instalar cabo", "novo ponto"
-   - IMPORTANTE: Em Requisição use "Impressora" (singular), em Incidente use "Impressoras" (plural)
-   - IMPORTANTE: "Requisição > Acesso > AD > Liberação de Rede / Wi-Fi" = permissão/acesso Wi-Fi | "Requisição > Equipamentos > Hardware > Infraestrutura de Rede" = instalação física de cabo/ponto/equipamento
-
-4. "Requisição > Equipamentos > Hardware > Montagem de Setup" = solicitação de montagem TEMPORÁRIA de equipamentos para eventos, transmissões, vídeo conferências
-   - "Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência" = montagem de equipamentos para transmissão/vídeo conferência em eventos
-   - Use para: eventos, transmissões, vídeo conferências, premiações, cerimônias que requerem montagem temporária de equipamentos (microfone, câmera, áudio, vídeo)
-   - Palavras-chave: "transmissão", "vídeo conferência", "evento", "apoio", "montagem", "setup", "premiação", "cerimônia", "auditório", "interação", "microfone", "câmera", "áudio", "vídeo", "solicitação de serviço", "acompanhamento"
-   - EXEMPLO ESPECÍFICO: "Solicitação de Serviço - APOIO para transmissão de premiação" → "TI > Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência"
-   - IMPORTANTE: Distinga de "Mudança > Gestão de Mudança > Programada > Instalação de Equipamento"
-     * Montagem de Setup = TEMPORÁRIA para eventos/ocasiões especiais (ex: "apoio para evento", "transmissão de premiação", "montagem temporária")
-     * Instalação de Equipamento = PERMANENTE para infraestrutura (ex: "instalar servidor", "nova infraestrutura permanente")
-
-5. "Requisição > Software" = solicitação de software (instalação, atualização, licenciamento)
-   - Use para: instalar software, atualizar software, renovar licença
-   - Palavras-chave: "instalar", "atualizar", "licença", "licenciamento"
-
-DISTINÇÕES PARA INCIDENTES:
-
-1. "Incidente > Acesso > AD > Rede / Wi-Fi - Sem Conexão" = problema de conexão Wi-Fi/rede (sem acesso, não conecta)
-   - Use para: não consegue conectar no Wi-Fi, sem conexão de rede, problema de acesso à rede
-   - Palavras-chave: "não conecta", "sem conexão", "Wi-Fi não funciona", "sem acesso à rede"
-   - IMPORTANTE: Distinga de "Incidente > Equipamentos > Hardware > Infraestrutura de Rede" (problema com equipamento físico)
-
-2. "Incidente > Equipamentos > Hardware > Infraestrutura de Rede" = problema com equipamento físico de rede
-   - "Incidente > Equipamentos > Hardware > Infraestrutura de Rede > Switch / Roteador com Falha" = problema com switch ou roteador
-   - "Incidente > Equipamentos > Hardware > Infraestrutura de Rede > Outros" = problema com cabo de rede, ponto de rede, outro equipamento físico
-   - Use para: cabo de rede com problema, switch com falha, roteador com problema, ponto de rede com falha
-   - Palavras-chave: "cabo quebrado", "switch com problema", "roteador com falha", "ponto de rede com problema", "equipamento de rede com falha"
-   - IMPORTANTE: "Incidente > Acesso > AD > Rede / Wi-Fi - Sem Conexão" = problema de conexão/acesso | "Incidente > Equipamentos > Hardware > Infraestrutura de Rede" = problema com equipamento físico
-
-3. "Incidente > Equipamentos" = problema com equipamento existente (não liga, travando, lentidão, etc.)
-   - "Incidente > Equipamentos > Hardware > Computadores > Não Liga / Travando" = computador não liga ou trava
-   - "Incidente > Equipamentos > Hardware > Computadores > Lentidão" = computador lento
-   - "Incidente > Equipamentos > Impressoras > Não Imprime" = impressora não imprime
-   - "Incidente > Equipamentos > Impressoras > Falha de Conexão / Spooler" = problema de conexão/spooler
-   - Palavras-chave: "não funciona", "não liga", "travando", "lentidão", "erro", "não imprime"
-   - IMPORTANTE: Em Incidente use "Impressoras" (plural), em Requisição use "Impressora" (singular)
-
-4. "Incidente > Software" = problema com software (erro, travamento, desempenho lento, etc.)
-   - Use para: software com erro, travando, desempenho lento, falha ao abrir
-   - Palavras-chave: "erro", "travando", "lento", "não abre", "falha"
-
-- Só retorne uma categoria se ela se encaixar PERFEITAMENTE no contexto do ticket, incluindo sistemas/aplicações mencionados E o tipo correto de problema (Incidente = problema, Requisição = solicitação)
-- Se a categoria mais próxima for muito genérica ou não mencionar sistemas/aplicações do ticket, responda "Nenhuma" para que possamos criar uma categoria mais específica
-
-Título: {title}
-Conteúdo: {content}
-
-Responda APENAS com o caminho completo da categoria EXATA da lista acima (ex: "TI > Incidente > Sistemas > Indisponibilidade de Sistema > Anews / Arion") e o ID entre parênteses (ex: "(84)"). 
-IMPORTANTE: Use o nome EXATO do sistema/aplicação como aparece na lista - não invente ou modifique.
-Se não encontrar uma categoria adequada e específica que mencione sistemas/aplicações do ticket, responda "Nenhuma".
-
-Formato da resposta:
-CATEGORIA: [caminho completo EXATO da lista]
-ID: [número do ID]"""
-
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        response_text = response.text.strip()
+        prompt = get_classification_prompt(categories_text, title, content)
+        response_text = _call_gemini_api(client, prompt)
         
         if not response_text or "Nenhuma" in response_text.lower():
             return None
@@ -458,12 +396,10 @@ ID: [número do ID]"""
         
         category_path = get_category_path(category)
         
-        # Rejeita categorias muito genéricas
         if _is_generic_category(category_path):
             logger.info(f"Categoria muito genérica encontrada ({len(category_path)} níveis): {' > '.join(category_path)}. Gerando sugestão mais específica.")
             return None
         
-        # Validação específica para "Problema de Acesso" e "Indisponibilidade de Sistema"
         ticket_text = f"{title} {content}".lower()
         mentions_system = _mentions_system(ticket_text)
         
@@ -484,9 +420,6 @@ ID: [número do ID]"""
             'ticket_type_label': ticket_type_label
         }
         
-    except ImportError:
-        logger.warning("Biblioteca google-genai não instalada, classificação será ignorada")
-        return {'error': 'library_not_installed', 'message': 'Biblioteca google-genai não está instalada.'}
     except Exception as e:
         error_type, error_message = _parse_gemini_error(e)
         logger.warning(f"Erro ao classificar com Gemini AI: {error_type} - {str(e)}")
@@ -514,29 +447,12 @@ def generate_category_suggestion(
     Returns:
         Optional[str]: Caminho completo sugerido ou None se não conseguir gerar
     """
-    api_key = getattr(settings, 'GEMINI_API_KEY', None)
-    
-    if not api_key:
+    client = _get_gemini_client()
+    if not client:
         return None
     
     ticket_text = f"{title} {content}".lower()
     
-    # Verificação prévia: se menciona eventos/transmissões, força categoria correta
-    event_indicators = ['evento', 'transmissão', 'transmissao', 'vídeo conferência', 'video conferencia', 
-                       'premiação', 'premiacao', 'cerimônia', 'cerimonia', 'auditório', 'auditorio',
-                       'solicitação de serviço - apoio', 'solicitação de serviço', 'apoio']
-    has_event_keywords = any(indicator in ticket_text for indicator in event_indicators)
-    
-    if has_event_keywords:
-        # Primeiro tenta encontrar categoria existente
-        similar_category = _find_similar_category_by_events(ticket_text)
-        if similar_category:
-            return similar_category
-        # Se não encontrou, força a categoria correta
-        logger.info(f"Ticket menciona eventos/transmissões. Forçando categoria: TI > Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência")
-        return "TI > Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência"
-    
-    # Verifica se já existe categoria similar antes de gerar nova sugestão
     similar_category = _find_similar_category_by_systems(ticket_text)
     if similar_category:
         return similar_category
@@ -546,184 +462,10 @@ def generate_category_suggestion(
         return similar_category
     
     try:
-        from google import genai
-        client = genai.Client(api_key=api_key)
-        
         categories_text = get_categories_for_ai()
         similar_categories = _get_similar_categories_for_reference(ticket_text)
-        
-        similar_ref = ""
-        if similar_categories:
-            similar_ref = f"\n\nCategorias similares existentes (use como referência para nomes e estrutura):\n" + "\n".join([f"- {cat}" for cat in similar_categories])
-        
-        prompt = f"""Você é um assistente especializado em classificação de tickets de suporte técnico.
-
-ANÁLISE OBRIGATÓRIA PRIMEIRO - SIGA ESTA ORDEM EXATA ANTES DE QUALQUER OUTRA COISA:
-
-1. O ticket menciona "evento", "transmissão", "vídeo conferência", "premiação", "cerimônia", "apoio", "solicitação de serviço - apoio", "acompanhamento de transmissão", "montagem", "setup", "auditório", "interação", "microfone", "câmera", "áudio", "vídeo"? 
-   → SE SIM, USE OBRIGATORIAMENTE: "TI > Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência"
-   → EXEMPLO: "Solicitação de Serviço - APOIO para transmissão de premiação" → "TI > Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência"
-   → NÃO USE OUTRA CATEGORIA SE O TICKET MENCIONA EVENTO/TRANSMISSÃO/APOIO
-
-2. O ticket menciona instalação permanente de infraestrutura (servidor, rede permanente, nova infraestrutura)? 
-   → Use: "TI > Mudança > Gestão de Mudança > Programada > Instalação de Equipamento"
-
-3. O ticket menciona problema com equipamento existente (não funciona, erro, travando, não liga)? 
-   → Use: "TI > Incidente > Equipamentos"
-
-4. O ticket menciona solicitação de novo equipamento permanente (computador, impressora, servidor)? 
-   → Use: "TI > Requisição > Equipamentos > Hardware"
-
-5. O ticket menciona instalação de software (Adobe, Office, etc.)? 
-   → Use: "TI > Requisição > Software > Instalação"
-
-Analise o seguinte ticket e sugira uma categoria hierárquica seguindo o padrão:
-TI > [Incidente/Requisição] > [Área] > [Subárea] > [Categoria Específica] > [Sistema/Aplicação quando aplicável]
-
-REGRAS IMPORTANTES:
-- SEMPRE analise o contexto completo do ticket antes de sugerir categoria
-- Se o ticket menciona eventos, transmissões, vídeo conferências, premiações, cerimônias, use "Requisição > Equipamentos > Hardware > Montagem de Setup"
-- SEMPRE inclua o sistema/aplicação mencionado no ticket no último nível quando aplicável
-- Se existem categorias similares listadas abaixo, USE O NOME EXATO e a ESTRUTURA EXATA como aparece nelas
-- Mantenha consistência com nomes de sistemas e estruturas já existentes no sistema
-
-DISTINÇÕES CRÍTICAS ENTRE TIPOS DE PROBLEMA:
-
-1. "Problema de Acesso" = usuário não consegue acessar/login (credencial inválida, senha errada, permissão negada, bloqueio de conta, etc.) - o sistema está funcionando, mas o usuário específico não consegue entrar
-   - Palavras-chave: "credencial inválida", "não consegui logar", "senha não funciona", "acesso negado", "conta bloqueada"
-   - Use: "TI > Incidente > Sistemas > Problema de Acesso > [Nome do Sistema - use nome exato se existir em categorias similares]"
-   - IMPORTANTE: Se o sistema é "Anews", use "Anews" (não "Anews / Arion") conforme categorias similares
-
-2. "Indisponibilidade de Sistema" = sistema está fora do ar, não está funcionando, inacessível para todos - problema de infraestrutura/servidor/redes
-   - Palavras-chave: "sistema fora do ar", "indisponível", "não está funcionando", "erro ao acessar" (sem mencionar credencial), "servidor não responde", "sistema down"
-   - Use: "TI > Incidente > Sistemas > Indisponibilidade de Sistema > [Nome do Sistema - use nome exato se existir em categorias similares]"
-   - IMPORTANTE: Se o sistema é "Anews / Arion", use "Anews / Arion" conforme categorias similares
-
-3. "Falha em Processo" = sistema funciona normalmente, mas um processo específico dentro do sistema falha (ex: processo de RP, processo de Salesforce)
-   - Palavras-chave: "processo não funciona", "falha no processo", "erro no processo", "processo travado"
-   - Use: "TI > Incidente > Sistemas > Falha em Processo > [Sistema específico: RP, Salesforce, Outros]"
-
-4. "Problema Geral de Sistema" = categoria genérica - EVITE quando há categorias mais específicas disponíveis
-
-5. "Outros" = categoria genérica - SEMPRE EVITE quando há categorias específicas disponíveis
-
-REGRAS DE CLASSIFICAÇÃO PARA REQUISIÇÕES:
-
-1. "Requisição > Acesso" = acesso a INFRAESTRUTURA (AD, VPN, Rede, Pastas de Rede)
-   - "Requisição > Acesso > AD > Criação de Usuário / Conta" = criação de usuário no Active Directory
-   - "Requisição > Acesso > AD > Liberação de Rede / Wi-Fi" = liberação de acesso de rede/Wi-Fi (permissão, não instalação física)
-   - "Requisição > Acesso > Acesso Remoto / VPN" = acesso remoto/VPN
-   - "Requisição > Acesso > Pastas de Rede" = acesso a pastas de rede
-   - Palavras-chave: "criar usuário AD", "liberar rede", "acesso VPN", "pasta de rede"
-   - IMPORTANTE: Distinga de "Requisição > Equipamentos > Hardware > Infraestrutura de Rede" (instalação física de cabo/ponto/equipamento)
-
-2. "Requisição > Sistemas > Acesso a Sistema" = acesso a SISTEMAS/APLICAÇÕES específicos (Anews, Salesforce, RP, etc.)
-   - "Requisição > Sistemas > Acesso a Sistema > Anews / Arion" = acesso ao sistema Anews/Arion
-   - "Requisição > Sistemas > Acesso a Sistema > Salesforce" = acesso ao Salesforce
-   - Palavras-chave: "acesso ao sistema", "solicitar acesso", "permissão no sistema"
-   - IMPORTANTE: Use o nome EXATO do sistema como aparece na lista (ex: "Anews / Arion", não apenas "Anews")
-
-3. "Requisição > Sistemas > Atualização / Parametrização" = atualização ou parametrização de sistema
-   - Palavras-chave: "atualizar sistema", "parametrizar", "configurar sistema"
-
-4. "Requisição > Equipamentos" = solicitação de equipamentos (novo, reparo, substituição, mudança de local)
-   - "Requisição > Equipamentos > Hardware > Computadores > Novo Equipamento" = solicitar novo computador
-   - "Requisição > Equipamentos > Hardware > Computadores > Reparo / Substituição" = solicitar reparo/substituição
-   - "Requisição > Equipamentos > Hardware > Infraestrutura de Rede > Novo Ponto de Rede" = solicitar instalação de novo ponto de rede (cabo físico)
-   - "Requisição > Equipamentos > Hardware > Infraestrutura de Rede > Instalação / Substituição de Equipamento" = solicitar instalação/substituição de equipamento de rede (switch, roteador, cabo)
-   - "Requisição > Equipamentos > Impressora > Nova Impressora / Instalação" = solicitar nova impressora
-   - "Requisição > Equipamentos > Impressora > Solicitação de Toner" = solicitar toner
-   - Palavras-chave: "novo equipamento", "preciso de", "solicitar", "reparo", "substituição", "toner", "cabo de rede", "ponto de rede", "instalar cabo", "novo ponto"
-   - IMPORTANTE: Em Requisição use "Impressora" (singular), em Incidente use "Impressoras" (plural)
-   - IMPORTANTE: "Requisição > Acesso > AD > Liberação de Rede / Wi-Fi" = permissão/acesso Wi-Fi | "Requisição > Equipamentos > Hardware > Infraestrutura de Rede" = instalação física de cabo/ponto/equipamento
-
-5. "Requisição > Equipamentos > Hardware > Montagem de Setup" = solicitação de montagem TEMPORÁRIA de equipamentos para eventos, transmissões, vídeo conferências
-   - "Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência" = montagem de equipamentos para transmissão/vídeo conferência em eventos
-   - Use para: eventos, transmissões, vídeo conferências, premiações, cerimônias que requerem montagem temporária de equipamentos (microfone, câmera, áudio, vídeo)
-   - Palavras-chave: "transmissão", "vídeo conferência", "evento", "apoio", "montagem", "setup", "premiação", "cerimônia", "auditório", "interação", "microfone", "câmera", "áudio", "vídeo", "solicitação de serviço", "acompanhamento"
-   - EXEMPLO ESPECÍFICO: "Solicitação de Serviço - APOIO para transmissão de premiação" → "TI > Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência"
-   - IMPORTANTE: Distinga de "Mudança > Gestão de Mudança > Programada > Instalação de Equipamento"
-     * Montagem de Setup = TEMPORÁRIA para eventos/ocasiões especiais (ex: "apoio para evento", "transmissão de premiação")
-     * Instalação de Equipamento = PERMANENTE para infraestrutura (ex: "instalar servidor", "nova infraestrutura permanente")
-
-6. "Requisição > Software" = solicitação de software (instalação, atualização, licenciamento)
-   - "Requisição > Software > Instalação" = instalar software
-   - "Requisição > Software > Atualização" = atualizar software
-   - "Requisição > Software > Licenciamento / Renovação" = renovar licença
-   - Palavras-chave: "instalar", "atualizar", "licença", "licenciamento"
-
-DISTINÇÕES PARA INCIDENTES:
-
-1. "Incidente > Acesso > AD > Rede / Wi-Fi - Sem Conexão" = problema de conexão Wi-Fi/rede (sem acesso, não conecta)
-   - Use para: não consegue conectar no Wi-Fi, sem conexão de rede, problema de acesso à rede
-   - Palavras-chave: "não conecta", "sem conexão", "Wi-Fi não funciona", "sem acesso à rede"
-   - IMPORTANTE: Distinga de "Incidente > Equipamentos > Hardware > Infraestrutura de Rede" (problema com equipamento físico)
-
-2. "Incidente > Equipamentos > Hardware > Infraestrutura de Rede" = problema com equipamento físico de rede
-   - "Incidente > Equipamentos > Hardware > Infraestrutura de Rede > Switch / Roteador com Falha" = problema com switch ou roteador
-   - "Incidente > Equipamentos > Hardware > Infraestrutura de Rede > Outros" = problema com cabo de rede, ponto de rede, outro equipamento físico
-   - Use para: cabo de rede com problema, switch com falha, roteador com problema, ponto de rede com falha
-   - Palavras-chave: "cabo quebrado", "switch com problema", "roteador com falha", "ponto de rede com problema", "equipamento de rede com falha"
-   - IMPORTANTE: "Incidente > Acesso > AD > Rede / Wi-Fi - Sem Conexão" = problema de conexão/acesso | "Incidente > Equipamentos > Hardware > Infraestrutura de Rede" = problema com equipamento físico
-
-3. "Incidente > Equipamentos" = problema com equipamento existente (não liga, travando, lentidão, etc.)
-   - "Incidente > Equipamentos > Hardware > Computadores > Não Liga / Travando" = computador não liga ou trava
-   - "Incidente > Equipamentos > Hardware > Computadores > Lentidão" = computador lento
-   - "Incidente > Equipamentos > Impressoras > Não Imprime" = impressora não imprime
-   - "Incidente > Equipamentos > Impressoras > Falha de Conexão / Spooler" = problema de conexão/spooler
-   - Palavras-chave: "não funciona", "não liga", "travando", "lentidão", "erro", "não imprime"
-   - IMPORTANTE: Em Incidente use "Impressoras" (plural), em Requisição use "Impressora" (singular)
-
-4. "Incidente > Software" = problema com software (erro, travamento, desempenho lento, etc.)
-   - "Incidente > Software > Erro de Execução" = erro ao executar software
-   - "Incidente > Software > Falha ao Abrir / Travamento" = software não abre ou trava
-   - "Incidente > Software > Desempenho Lento" = software lento
-   - Palavras-chave: "erro", "travando", "lento", "não abre", "falha"
-
-DISTINÇÃO CRÍTICA GERAL:
-- "Requisição > Acesso > AD > Liberação de Rede / Wi-Fi" = solicitação de PERMISSÃO/LIBERAÇÃO de acesso Wi-Fi (não é instalação física)
-- "Requisição > Equipamentos > Hardware > Infraestrutura de Rede" = solicitação de INSTALAÇÃO FÍSICA de cabo, ponto de rede, equipamento (switch, roteador)
-- "Incidente > Acesso > AD > Rede / Wi-Fi - Sem Conexão" = problema de CONEXÃO/ACESSO Wi-Fi (não conecta, sem acesso)
-- "Incidente > Equipamentos > Hardware > Infraestrutura de Rede" = problema com EQUIPAMENTO FÍSICO de rede (cabo quebrado, switch com falha, roteador com problema)
-- "Requisição > Acesso" é para INFRAESTRUTURA (AD, rede, VPN) - permissões e acessos
-- "Requisição > Sistemas > Acesso a Sistema" é para SISTEMAS/APLICAÇÕES específicos (Anews, Salesforce, etc.)
-- "Requisição > Equipamentos > Hardware > Montagem de Setup" = montagem TEMPORÁRIA para eventos/transmissões | "Mudança > Instalação de Equipamento" = instalação PERMANENTE de infraestrutura
-- "Requisição" = solicitação (novo, instalar, acesso, montagem temporária para evento) | "Incidente" = problema (não funciona, erro, travando) | "Mudança" = alteração PERMANENTE na infraestrutura
-- "TI > Mudança" = gestão de mudanças PERMANENTES na infraestrutura (planejamento, execução, gestão de mudança)
-
-{similar_ref}
-
-Exemplos de padrões:
-- TI > Requisição > Acesso > AD > Criação de Usuário / Conta
-- TI > Incidente > Sistemas > Problema de Acesso > Anews (para "não consegui logar no Anews, credencial inválida")
-- TI > Incidente > Sistemas > Indisponibilidade de Sistema > Anews / Arion (para "Anews está fora do ar")
-- TI > Requisição > Sistemas > Acesso a Sistema > Anews / Arion (para "preciso de acesso ao Anews")
-- TI > Incidente > Equipamentos > Hardware > Computadores > Não Liga / Travando
-- TI > Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência (para "solicitação de apoio para transmissão de evento")
-
-Título: {title}
-Conteúdo: {content}
-
-LEMBRE-SE: SE O TICKET MENCIONA EVENTO/TRANSMISSÃO/APOIO/PREMIAÇÃO, USE OBRIGATORIAMENTE "TI > Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência"
-
-Sugira APENAS o caminho completo da categoria seguindo o padrão acima.
-IMPORTANTE CRÍTICO: 
-- Se há categorias similares listadas acima, use o nome EXATO e a ESTRUTURA EXATA como aparece nelas
-- Para eventos/transmissões/apoio, SEMPRE use "TI > Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência"
-- NÃO invente categorias que não seguem o padrão hierárquico correto
-- NÃO confunda "Montagem de Setup" (temporário para eventos) com "Instalação de Equipamento" (permanente)
-- NÃO confunda solicitação de apoio para evento com instalação de software
-- NÃO use "Software > Instalação" se o ticket menciona evento/transmissão/apoio
-Se não conseguir determinar, responda "Nenhuma".
-
-Formato da resposta:
-SUGESTÃO: [caminho completo]"""
-
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        response_text = response.text.strip()
+        prompt = get_suggestion_prompt(categories_text, similar_categories, title, content)
+        response_text = _call_gemini_api(client, prompt)
         
         if not response_text or "Nenhuma" in response_text.lower():
             return None
@@ -749,9 +491,6 @@ SUGESTÃO: [caminho completo]"""
         
         return None
         
-    except ImportError:
-        logger.warning("Biblioteca google-genai não instalada, geração de sugestão será ignorada")
-        return None
     except Exception as e:
         error_type, error_message = _parse_gemini_error(e)
         logger.warning(f"Erro ao gerar sugestão de categoria: {error_type} - {str(e)}")
@@ -843,3 +582,71 @@ def classify_ticket(
             logger.info(f"Sugestão de categoria criada para ticket {ticket_id}: {suggested_path}")
     
     return result
+
+
+# =========================================================
+# BASE DE CONHECIMENTO
+# =========================================================
+
+def generate_knowledge_base_article(
+    article_type: str,
+    category: str,
+    context: str
+) -> Optional[Dict[str, any]]:
+    """
+    Gera um artigo de Base de Conhecimento usando Google Gemini AI.
+    
+    Args:
+        article_type: Tipo do artigo ('conceitual', 'operacional' ou 'troubleshooting')
+        category: Categoria da Base de Conhecimento (ex: "RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout")
+        context: Contexto do ambiente, sistemas, servidores, softwares envolvidos
+        
+    Returns:
+        Optional[Dict[str, any]]: Dicionário com:
+            - 'article': Texto completo do artigo gerado
+            - 'article_type': Tipo do artigo
+            - 'category': Categoria informada
+        Retorna None se houver erro ou se a API não estiver configurada.
+        Retorna dict com 'error' e 'message' em caso de erro na API.
+    """
+    if article_type.lower() not in VALID_ARTICLE_TYPES:
+        logger.warning(f"Tipo de artigo inválido: {article_type}. Tipos válidos: {VALID_ARTICLE_TYPES}")
+        return {'error': 'invalid_article_type', 'message': f'Tipo de artigo inválido. Tipos válidos: {", ".join(VALID_ARTICLE_TYPES)}'}
+    
+    if not category or not category.strip():
+        logger.warning("Categoria não informada para geração de artigo")
+        return {'error': 'missing_category', 'message': 'Categoria da Base de Conhecimento é obrigatória'}
+    
+    if not context or not context.strip():
+        logger.warning("Contexto não informado para geração de artigo")
+        return {'error': 'missing_context', 'message': 'Contexto do ambiente é obrigatório'}
+    
+    client = _get_gemini_client()
+    if not client:
+        logger.debug("GEMINI_API_KEY não configurada, geração de artigo será ignorada")
+        return None
+    
+    try:
+        prompt = get_knowledge_base_prompt(article_type, category, context)
+        response_text = _call_gemini_api(client, prompt)
+        
+        if not response_text:
+            logger.warning("Resposta vazia da API do Gemini para geração de artigo")
+            return {'error': 'empty_response', 'message': 'A API do Gemini retornou uma resposta vazia'}
+        
+        lines = response_text.split('\n')
+        if lines and lines[0].lower().startswith(('artigo:', 'base de conhecimento:')):
+            response_text = '\n'.join(lines[1:]).strip()
+        
+        logger.info(f"Artigo de Base de Conhecimento gerado com sucesso. Tipo: {article_type}, Categoria: {category}")
+        
+        return {
+            'article': response_text,
+            'article_type': article_type.lower(),
+            'category': category.strip()
+        }
+        
+    except Exception as e:
+        error_type, error_message = _parse_gemini_error(e)
+        logger.warning(f"Erro ao gerar artigo de Base de Conhecimento: {error_type} - {str(e)}")
+        return {'error': error_type, 'message': error_message}

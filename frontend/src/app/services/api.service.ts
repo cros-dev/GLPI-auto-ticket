@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { CategorySuggestion } from '../models/category-suggestion.interface';
 import { CategorySuggestionStats } from '../models/category-suggestion-stats.interface';
+import { KnowledgeBaseArticleRequest, KnowledgeBaseArticleResponse } from '../models/knowledge-base-article.interface';
 
 /**
  * Serviço para comunicação com a API REST do backend.
@@ -179,6 +180,30 @@ export class ApiService {
       deleted: number;
       total: number;
     }>(url, {});
+  }
+
+  /**
+   * Gera um artigo de Base de Conhecimento usando Google Gemini AI.
+   * 
+   * Endpoint: POST /api/knowledge-base/article/
+   * 
+   * @param request - Dados da requisição contendo tipo, categoria e contexto
+   * @returns Observable com o artigo gerado
+   * 
+   * @example
+   * ```typescript
+   * this.apiService.generateKnowledgeBaseArticle({
+   *   article_type: 'operacional',
+   *   category: 'RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout',
+   *   context: 'Ambiente de broadcast com servidores de playout...'
+   * }).subscribe(response => {
+   *   console.log('Artigo gerado:', response.article);
+   * });
+   * ```
+   */
+  generateKnowledgeBaseArticle(request: KnowledgeBaseArticleRequest): Observable<KnowledgeBaseArticleResponse> {
+    const url = `${this.apiUrl}/knowledge-base/article/`;
+    return this.http.post<KnowledgeBaseArticleResponse>(url, request);
   }
 }
 
