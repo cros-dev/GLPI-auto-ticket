@@ -7,8 +7,8 @@ Este módulo contém todos os serializers usados para:
 - Transformação entre modelos Django e JSON
 """
 from rest_framework import serializers
-from .models import Ticket, GlpiCategory, SatisfactionSurvey
-from .services import VALID_ARTICLE_TYPES
+from .models import Ticket, GlpiCategory, SatisfactionSurvey, CategorySuggestion
+from .constants import VALID_ARTICLE_TYPES
 
 
 # =========================================================
@@ -212,6 +212,32 @@ class CategorySuggestionUpdateSerializer(serializers.Serializer):
         allow_blank=True,
         help_text="Notas adicionais sobre a sugestão"
     )
+
+
+class CategorySuggestionListSerializer(serializers.ModelSerializer):
+    """
+    Serializer para listagem de sugestões de categorias.
+    
+    Usado para serializar sugestões de categorias na listagem.
+    """
+    ticket_id = serializers.IntegerField(source='ticket.id', read_only=True)
+    ticket_title = serializers.CharField(read_only=True)
+    ticket_content = serializers.CharField(read_only=True)
+    
+    class Meta:
+        model = CategorySuggestion
+        fields = [
+            'id',
+            'suggested_path',
+            'ticket_id',
+            'ticket_title',
+            'ticket_content',
+            'status',
+            'created_at',
+            'reviewed_at',
+            'reviewed_by',
+            'notes'
+        ]
 
 
 class KnowledgeBaseArticleRequestSerializer(serializers.Serializer):

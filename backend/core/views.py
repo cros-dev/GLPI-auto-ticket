@@ -14,8 +14,6 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.shortcuts import render
-from django.conf import settings
-import requests
 import logging
 
 from .models import GlpiCategory, Ticket, CategorySuggestion, SatisfactionSurvey
@@ -28,17 +26,27 @@ from .serializers import (
     SatisfactionSurveySerializer,
     CategorySuggestionReviewSerializer,
     CategorySuggestionUpdateSerializer,
+    CategorySuggestionListSerializer,
     KnowledgeBaseArticleRequestSerializer,
     KnowledgeBaseArticleResponseSerializer
 )
-from .utils import clean_html_content
 from .services import (
     classify_ticket,
     classify_ticket_with_gemini,
     generate_category_suggestion,
     determine_ticket_type,
-    generate_knowledge_base_article
+    generate_knowledge_base_article,
+    update_ticket_with_classification,
+    handle_classification_failure,
+    process_suggestion_review,
+    parse_suggestion_path,
+    find_category_by_path,
+    process_categories_sync,
+    process_webhook_ticket,
+    process_survey_rating,
+    process_survey_comment
 )
+from .clients.glpi_client import GlpiLegacyClient
 
 logger = logging.getLogger(__name__)
 
@@ -47,143 +55,8 @@ logger = logging.getLogger(__name__)
 # FUNÇÕES AUXILIARES
 # =========================================================
 
-def _find_category_by_path(path: str) -> Optional[GlpiCategory]:
-    """
-    Busca uma categoria existente no banco percorrendo o caminho informado.
-    
-    Args:
-        path: Caminho hierárquico (ex.: "TI > Requisição")
-        
-    Returns:
-        Optional[GlpiCategory]: Categoria encontrada ou None se não existir
-    """
-    if not path:
-        return None
-    
-    parts = [p.strip() for p in path.split('>') if p.strip()]
-    parent = None
-    for part in parts:
-        parent = GlpiCategory.objects.filter(name=part, parent=parent).first()
-        if not parent:
-            return None
-    return parent
 
 
-def _process_categories_sync(categories, source_name="fonte"):
-    """
-    Processa lista de categorias e cria/atualiza no banco.
-    Remove categorias que não estão na fonte para manter o Django como espelho do GLPI.
-    
-    Args:
-        categories: Lista de dicionários contendo:
-            - glpi_id: ID da categoria no GLPI
-            - full_path: Caminho completo (ex.: "TI > Requisição > Acesso")
-            - parts: Lista de partes do caminho
-            - parent_path: Caminho do pai (ex.: "TI > Requisição")
-        source_name: Nome da fonte (para logs/mensagens de erro)
-        
-    Returns:
-        dict: Estatísticas de criação/atualização/remoção
-    """
-    created_count = 0
-    updated_count = 0
-    cache_by_path = {}
-    
-    source_glpi_ids = {entry["glpi_id"] for entry in categories}
-    
-    sorted_categories = sorted(categories, key=lambda item: len(item["parts"]))
-    
-    for entry in sorted_categories:
-        category_name = entry["parts"][-1]
-        parent_path = entry["parent_path"]
-        parent = None
-        
-        if parent_path:
-            parent = cache_by_path.get(parent_path)
-            if not parent:
-                parent = _find_category_by_path(parent_path)
-            if not parent:
-                parent_segments = [p.strip() for p in parent_path.split('>') if p.strip()]
-                if len(parent_segments) > 1:
-                    logger.warning(f"Categoria pai '{parent_path}' não encontrada na {source_name}. Criando sem pai.")
-        
-        obj, created = GlpiCategory.objects.update_or_create(
-            glpi_id=entry["glpi_id"],
-            defaults={
-                "name": category_name,
-                "parent": parent,
-                "full_path": entry["full_path"]
-            }
-        )
-        
-        cache_by_path[entry["full_path"]] = obj
-        if created:
-            created_count += 1
-        else:
-            updated_count += 1
-    
-    deleted_count = 0
-    if source_glpi_ids:
-        categories_to_delete = GlpiCategory.objects.exclude(glpi_id__in=source_glpi_ids)
-        deleted_count = categories_to_delete.count()
-        categories_to_delete.delete()
-
-    return {
-        "created": created_count,
-        "updated": updated_count,
-        "deleted": deleted_count,
-        "total": GlpiCategory.objects.count()
-    }
-
-
-def _notify_n8n_survey(*, ticket_id, rating, comment):
-    """
-    Notifica n8n para atualizar pesquisa de satisfação no GLPI.
-    
-    Args:
-        ticket_id: ID do ticket
-        rating: Nota de satisfação (1-5)
-        comment: Comentário opcional
-    """
-    n8n_webhook_url = getattr(settings, 'N8N_SURVEY_RESPONSE_WEBHOOK_URL', None)
-    
-    if not n8n_webhook_url:
-        return
-    
-    try:
-        payload = {
-            'ticket_id': ticket_id,
-            'rating': rating,
-            'comment': comment or '',
-            'type': 'satisfaction-survey-update'
-        }
-        
-        response = requests.post(
-            n8n_webhook_url,
-            json=payload,
-            timeout=10
-        )
-        response.raise_for_status()
-    except requests.RequestException as e:
-        logger.error(f"Erro ao notificar n8n: {str(e)}")
-
-
-def _get_glpi_base_url() -> Optional[str]:
-    """
-    Retorna a URL base da API Legacy do GLPI.
-    
-    Returns:
-        Optional[str]: URL base formatada (ex: "http://172.16.0.180:81/api.php/v1") 
-                      ou None se não estiver configurada
-    """
-    glpi_url = getattr(settings, 'GLPI_LEGACY_API_URL', None)
-    if not glpi_url:
-        return None
-    
-    glpi_url = glpi_url.rstrip('/')
-    if glpi_url.endswith('/api.php/v1'):
-        return glpi_url
-    return f"{glpi_url}/api.php/v1"
 
 
 def _get_suggestion_or_404(pk: int) -> Tuple[Optional[CategorySuggestion], Optional[Response]]:
@@ -235,31 +108,6 @@ def _validate_and_get_suggestion(pk: int) -> Tuple[Optional[CategorySuggestion],
     return suggestion, None
 
 
-def _parse_suggestion_path(suggested_path: str) -> Tuple[str, str, Optional[Response]]:
-    """
-    Faz parse do caminho sugerido e valida.
-    
-    Args:
-        suggested_path: Caminho completo sugerido
-        
-    Returns:
-        Tuple[str, str, Optional[Response]]: (category_name, parent_path, error_response)
-            - category_name: Nome da categoria ou string vazia
-            - parent_path: Caminho do pai ou string vazia
-            - error_response: Response com erro ou None se válido
-    """
-    suggested_path = (suggested_path or '').strip()
-    path_parts = [p.strip() for p in suggested_path.split('>') if p.strip()]
-    category_name = path_parts[-1] if path_parts else ''
-    parent_path = ' > '.join(path_parts[:-1]) if len(path_parts) > 1 else ''
-    
-    if not category_name:
-        return None, None, Response(
-            {"detail": "Sugestão inválida: suggested_path vazio ou mal formatado."},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    return category_name, parent_path, None
 
 
 def _validate_survey_ticket(ticket_id_str):
@@ -286,165 +134,10 @@ def _validate_survey_ticket(ticket_id_str):
         return None, {'error': f'Ticket #{ticket_id} não encontrado.'}
 
 
-def _validate_survey_token(survey, provided_token):
-    """
-    Valida token de pesquisa de satisfação.
-    
-    Args:
-        survey: Instância de SatisfactionSurvey ou None
-        provided_token: Token fornecido pelo usuário
-        
-    Returns:
-        bool: True se válido, False caso contrário
-    """
-    if not survey or not survey.token:
-        return True  # Sem token, permite acesso
-    
-    if not provided_token or not survey.is_token_valid(provided_token):
-        return False
-    
-    return True
 
 
-def _process_suggestion_review(request, suggestion, new_status, success_message):
-    """
-    Processa aprovação ou rejeição de sugestão de categoria.
-    
-    Args:
-        request: Request HTTP
-        suggestion: Instância de CategorySuggestion
-        new_status: 'approved' ou 'rejected'
-        success_message: Mensagem de sucesso
-        
-    Returns:
-        Response: Resposta HTTP
-    """
-    serializer = CategorySuggestionReviewSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    
-    reviewed_at = timezone.now()
-    reviewed_by = request.user.username if request.user.is_authenticated else 'api'
-    notes = (serializer.validated_data.get('notes') or '').strip()
-    
-    category_name, parent_path, error_response = _parse_suggestion_path(suggestion.suggested_path)
-    if error_response:
-        return error_response
-    
-    parent = _find_category_by_path(parent_path) if parent_path else None
-    if parent_path and not parent:
-        return Response(
-            {"detail": f"Categoria pai não encontrada no espelho local: '{parent_path}'. Sincronize as categorias do GLPI e tente novamente."},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    parent_glpi_id = parent.glpi_id if parent else 0
-    path_parts = [p.strip() for p in (suggestion.suggested_path or '').split('>') if p.strip()]
-    ticket_type, ticket_type_label = determine_ticket_type(path_parts)
-    is_incident = 1 if ticket_type == 1 else 0
-    is_request = 1 if ticket_type == 2 else 0
-    is_problem = 0
-    is_change = 0
-    
-    _notify_n8n_category_approval(
-        suggestion_id=suggestion.id,
-        ticket_id=suggestion.ticket.id,
-        suggested_path=suggestion.suggested_path,
-        parent_glpi_id=parent_glpi_id,
-        category_name=category_name,
-        status=new_status,
-        notes=notes,
-        reviewed_by=reviewed_by,
-        reviewed_at=reviewed_at.isoformat(),
-        is_incident=is_incident,
-        is_request=is_request,
-        is_problem=is_problem,
-        is_change=is_change
-    )
-    
-    suggestion.status = new_status
-    suggestion.reviewed_at = reviewed_at
-    suggestion.reviewed_by = reviewed_by
-    suggestion.notes = notes
-    suggestion.save()
-    
-    return Response(
-        {
-            "detail": success_message,
-            "suggestion": {
-                "id": suggestion.id,
-                "suggested_path": suggestion.suggested_path,
-                "status": suggestion.status
-            }
-        },
-        status=status.HTTP_200_OK
-    )
 
 
-def _notify_n8n_category_approval(
-    *,
-    suggestion_id,
-    ticket_id,
-    suggested_path,
-    parent_glpi_id,
-    category_name,
-    status,
-    notes,
-    reviewed_by,
-    reviewed_at,
-    is_incident=0,
-    is_request=0,
-    is_problem=0,
-    is_change=0
-):
-    """
-    Notifica n8n sobre aprovação/rejeição de sugestão de categoria.
-    
-    Args:
-        suggestion_id: ID da sugestão no Django
-        ticket_id: ID do ticket relacionado
-        suggested_path: Caminho sugerido da categoria (hierárquico)
-        parent_glpi_id: ID do pai no GLPI (itilcategories_id)
-        category_name: Nome do último nível da categoria a ser criada
-        status: Status final da sugestão ('approved' | 'rejected')
-        notes: Notas opcionais do revisor
-        reviewed_by: Usuário que revisou
-        reviewed_at: Data/hora da revisão (ISO)
-        is_incident: Se a categoria é para incidentes (0 ou 1)
-        is_request: Se a categoria é para requisições (0 ou 1)
-        is_problem: Se a categoria é para problemas (0 ou 1)
-        is_change: Se a categoria é para mudanças (0 ou 1)
-    """
-    n8n_webhook_url = getattr(settings, 'N8N_CATEGORY_APPROVAL_WEBHOOK_URL', None)
-    
-    if not n8n_webhook_url:
-        return
-    
-    try:
-        payload = {
-            'suggestion_id': suggestion_id,
-            'ticket_id': ticket_id,
-            'suggested_path': suggested_path,
-            'parent_glpi_id': parent_glpi_id,
-            'category_name': category_name,
-            'status': status,
-            'notes': notes or '',
-            'reviewed_by': reviewed_by or '',
-            'reviewed_at': reviewed_at,
-            'type': 'category-suggestion-review',
-            'is_incident': is_incident,
-            'is_request': is_request,
-            'is_problem': is_problem,
-            'is_change': is_change
-        }
-        
-        response = requests.post(
-            n8n_webhook_url,
-            json=payload,
-            timeout=10
-        )
-        response.raise_for_status()
-    except requests.RequestException as e:
-        logger.error(f"Erro ao notificar n8n: {str(e)}")
 
 
 # =========================================================
@@ -492,157 +185,28 @@ class GlpiCategorySyncFromApiView(APIView):
     
     def post(self, request):
         try:
-            categories = self._fetch_categories_from_api()
+            glpi_client = GlpiLegacyClient()
+            categories = glpi_client.fetch_categories()
+            
             if not categories:
                 return Response(
                     {"detail": "Nenhuma categoria encontrada na API do GLPI."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            result = _process_categories_sync(categories, source_name="API")
+            
+            result = process_categories_sync(categories, source_name="API")
             return Response(result, status=status.HTTP_200_OK)
         except ValueError as e:
             return Response(
                 {"detail": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        except requests.RequestException as e:
+        except Exception as e:
             logger.error(f"Erro ao buscar categorias da API GLPI: {str(e)}")
             return Response(
                 {"detail": f"Erro ao conectar com a API do GLPI: {str(e)}"},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
-    
-    def _get_session_token(self):
-        """
-        Obtém token de sessão da API Legacy do GLPI.
-            
-        Returns:
-            str: Session token para autenticação
-            
-        Raises:
-            requests.RequestException: Se houver erro na autenticação
-        """
-        glpi_user = getattr(settings, 'GLPI_LEGACY_API_USER', None)
-        glpi_password = getattr(settings, 'GLPI_LEGACY_API_PASSWORD', None)
-        glpi_app_token = getattr(settings, 'GLPI_LEGACY_APP_TOKEN', None)
-        base_url = _get_glpi_base_url()
-        
-        if not base_url or not glpi_user or not glpi_password:
-            raise ValueError("Configuração da API Legacy do GLPI incompleta. Verifique GLPI_LEGACY_API_URL, GLPI_LEGACY_API_USER e GLPI_LEGACY_API_PASSWORD no .env")
-        
-        headers = {
-            'Content-Type': 'application/json'
-        }
-        if glpi_app_token:
-            headers['App-Token'] = glpi_app_token
-        
-        response = requests.post(
-            f"{base_url}/initSession",
-            json={
-                "login": glpi_user,
-                "password": glpi_password
-            },
-            headers=headers,
-            timeout=10
-        )
-        response.raise_for_status()
-        data = response.json()
-                
-        if 'session_token' not in data:
-            raise ValueError("Token de sessão não retornado pela API do GLPI")
-        
-        return data['session_token']
-    
-    def _fetch_categories_from_api(self):
-        """
-        Busca todas as categorias ITIL da API Legacy do GLPI.
-        
-        Returns:
-            list: Lista de dicionários contendo caminho completo, partes e glpi_id
-            
-        Raises:
-            requests.RequestException: Se houver erro na requisição
-            ValueError: Se houver erro ao processar os dados
-        """
-        base_url = _get_glpi_base_url()
-        if not base_url:
-            raise ValueError("GLPI_LEGACY_API_URL não configurado")
-        
-        session_token = self._get_session_token()
-        
-        headers = {
-            'Content-Type': 'application/json',
-            'Session-Token': session_token
-        }
-        glpi_app_token = getattr(settings, 'GLPI_LEGACY_APP_TOKEN', None)
-        if glpi_app_token:
-            headers['App-Token'] = glpi_app_token
-        
-        all_categories = []
-        range_start = 0
-        range_limit = 50
-        
-        while True:
-            response = requests.get(
-                f"{base_url}/ITILCategory/?expand_dropdowns=true&range={range_start}-{range_start + range_limit - 1}",
-                headers=headers,
-                timeout=30
-            )
-            response.raise_for_status()
-            
-            categories_batch = response.json()
-            if not categories_batch or not isinstance(categories_batch, list):
-                break
-            
-            all_categories.extend(categories_batch)
-            
-            content_range = response.headers.get('Content-Range', '')
-            if content_range:
-                range_info = content_range.split('/')
-                if len(range_info) == 2:
-                    current_range = range_info[0]
-                    total_count = int(range_info[1])
-                    if '-' in current_range:
-                        current_end = int(current_range.split('-')[1])
-                        if current_end >= total_count - 1:
-                            break
-            
-            range_start += range_limit
-            
-            if len(categories_batch) < range_limit:
-                break
-        
-        processed_categories = []
-        seen_ids = set()
-        
-        for category in all_categories:
-            glpi_id = category.get('id')
-            if not glpi_id or glpi_id in seen_ids:
-                continue
-            
-            seen_ids.add(glpi_id)
-            completename = category.get('completename', '')
-            
-            if not completename:
-                name = category.get('name', '')
-                if name:
-                    completename = name
-            
-            if not completename:
-                continue
-        
-            parts = [p.strip() for p in completename.split('>') if p.strip()]
-            if not parts:
-                continue
-            
-            processed_categories.append({
-                "full_path": ' > '.join(parts),
-                "parts": parts,
-                "parent_path": ' > '.join(parts[:-1]) if len(parts) > 1 else '',
-                "glpi_id": glpi_id,
-            })
-        
-        return processed_categories
 
 
 # =========================================================
@@ -669,26 +233,7 @@ class GlpiWebhookView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        cleaned_content = clean_html_content(data["content"])
-
-        ticket, _ = Ticket.objects.update_or_create(
-            id=data["id"],
-            defaults={
-                "date_creation": data["date_creation"],
-                "user_recipient_id": data["user_recipient_id"],
-                "user_recipient_name": data["user_recipient_name"],
-                "location": data.get("location") or "",
-                "name": data["name"],
-                "content_html": cleaned_content,
-                "category_name": data.get("category_name") or "",
-                "entity_id": data.get("entity_id"),
-                "entity_name": data.get("entity_name") or "",
-                "team_assigned_id": data.get("team_assigned_id"),
-                "team_assigned_name": data.get("team_assigned_name") or "",
-                "last_glpi_update": timezone.now(),
-                "raw_payload": request.data
-            }
-        )
+        ticket = process_webhook_ticket(data, request.data)
 
         return Response(
             {"detail": "Ticket atualizado", "ticket": TicketSerializer(ticket).data},
@@ -783,22 +328,7 @@ class TicketClassificationView(APIView):
         
         if result:
             if glpi_ticket_id:
-                try:
-                    ticket = Ticket.objects.get(id=glpi_ticket_id)
-                    suggested_category = GlpiCategory.objects.filter(
-                        glpi_id=result["suggested_category_id"]
-                    ).first()
-                    
-                    if suggested_category:
-                        ticket.category = suggested_category
-                        ticket.category_name = result["suggested_category_name"]
-                        ticket.classification_method = result.get("classification_method")
-                        ticket.classification_confidence = result.get("confidence")
-                        ticket.save()
-                except Ticket.DoesNotExist:
-                    logger.warning(f"Ticket {glpi_ticket_id} não encontrado ao atualizar categoria")
-                except Exception as e:
-                    logger.error(f"Erro ao atualizar ticket {glpi_ticket_id}: {str(e)}")
+                update_ticket_with_classification(glpi_ticket_id, result)
             
             response_serializer = TicketClassificationResponseSerializer(result)
             return Response(response_serializer.data, status=status.HTTP_200_OK)
@@ -806,22 +336,7 @@ class TicketClassificationView(APIView):
             suggestion_created = False
             
             if glpi_ticket_id:
-                try:
-                    ticket = Ticket.objects.get(id=glpi_ticket_id)
-                    ticket.glpi_status = "Aprovação"
-                    ticket.save()
-                    
-                    suggestion = CategorySuggestion.objects.filter(
-                        ticket=ticket,
-                        status='pending'
-                    ).order_by('-created_at').first()
-                    
-                    if suggestion:
-                        suggestion_created = True
-                except Ticket.DoesNotExist:
-                    logger.warning(f"Ticket {glpi_ticket_id} não encontrado ao definir status")
-                except Exception as e:
-                    logger.error(f"Erro ao processar ticket {glpi_ticket_id}: {str(e)}")
+                _, suggestion_created = handle_classification_failure(glpi_ticket_id)
             
             detail_message = "Não foi possível classificar o ticket. Verifique se há categorias cadastradas."
             if suggestion_created:
@@ -861,23 +376,7 @@ class CategorySuggestionListView(generics.ListAPIView):
             queryset = queryset.filter(status='pending')
         return queryset
     
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        data = []
-        for suggestion in queryset:
-            data.append({
-                'id': suggestion.id,
-                'suggested_path': suggestion.suggested_path,
-                'ticket_id': suggestion.ticket.id,
-                'ticket_title': suggestion.ticket_title,
-                'ticket_content': suggestion.ticket_content if suggestion.ticket_content else '',
-                'status': suggestion.status,
-                'created_at': suggestion.created_at,
-                'reviewed_at': suggestion.reviewed_at,
-                'reviewed_by': suggestion.reviewed_by,
-                'notes': suggestion.notes
-            })
-        return Response(data, status=status.HTTP_200_OK)
+    serializer_class = CategorySuggestionListSerializer
 
 
 class CategorySuggestionStatsView(APIView):
@@ -924,7 +423,39 @@ class CategorySuggestionApproveView(APIView):
         suggestion, error_response = _validate_and_get_suggestion(pk)
         if error_response:
             return error_response
-        return _process_suggestion_review(request, suggestion, 'approved', "Sugestão aprovada")
+        
+        serializer = CategorySuggestionReviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        reviewed_at = timezone.now()
+        reviewed_by = request.user.username if request.user.is_authenticated else 'api'
+        notes = (serializer.validated_data.get('notes') or '').strip()
+        
+        success, error_message = process_suggestion_review(
+            suggestion=suggestion,
+            new_status='approved',
+            notes=notes,
+            reviewed_by=reviewed_by,
+            reviewed_at=reviewed_at
+        )
+        
+        if not success:
+            return Response(
+                {"detail": error_message},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return Response(
+            {
+                "detail": "Sugestão aprovada",
+                "suggestion": {
+                    "id": suggestion.id,
+                    "suggested_path": suggestion.suggested_path,
+                    "status": suggestion.status
+                }
+            },
+            status=status.HTTP_200_OK
+        )
 
 
 class CategorySuggestionRejectView(APIView):
@@ -949,7 +480,39 @@ class CategorySuggestionRejectView(APIView):
         suggestion, error_response = _validate_and_get_suggestion(pk)
         if error_response:
             return error_response
-        return _process_suggestion_review(request, suggestion, 'rejected', "Sugestão rejeitada")
+        
+        serializer = CategorySuggestionReviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        reviewed_at = timezone.now()
+        reviewed_by = request.user.username if request.user.is_authenticated else 'api'
+        notes = (serializer.validated_data.get('notes') or '').strip()
+        
+        success, error_message = process_suggestion_review(
+            suggestion=suggestion,
+            new_status='rejected',
+            notes=notes,
+            reviewed_by=reviewed_by,
+            reviewed_at=reviewed_at
+        )
+        
+        if not success:
+            return Response(
+                {"detail": error_message},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return Response(
+            {
+                "detail": "Sugestão rejeitada",
+                "suggestion": {
+                    "id": suggestion.id,
+                    "suggested_path": suggestion.suggested_path,
+                    "status": suggestion.status
+                }
+            },
+            status=status.HTTP_200_OK
+        )
 
 
 class CategorySuggestionUpdateView(APIView):
@@ -1018,12 +581,6 @@ class CategorySuggestionUpdateView(APIView):
         suggested_path = serializer.validated_data.get('suggested_path', '').strip()
         notes = serializer.validated_data.get('notes', '').strip()
         
-        if not suggested_path:
-            return Response(
-                {"detail": "Campo 'suggested_path' é obrigatório e não pode estar vazio."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
         suggestion.suggested_path = suggested_path
         suggestion.notes = notes
         suggestion.save()
@@ -1061,14 +618,13 @@ class CategorySuggestionPreviewView(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
-        title = request.data.get('title', '').strip()
-        content = request.data.get('content', '').strip()
+        # Usa serializer para validação ao invés de validação manual
+        serializer = TicketClassificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
         
-        if not title:
-            return Response(
-                {"detail": "Campo 'title' é obrigatório"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        title = data.get('title', '').strip()
+        content = data.get('content', '').strip()
         
         result = classify_ticket_with_gemini(title, content)
         
@@ -1106,7 +662,18 @@ class CategorySuggestionPreviewView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        path_parts = [part.strip() for part in suggested_path.split('>') if part.strip()]
+        category_name, parent_path, error_message = parse_suggestion_path(suggested_path)
+        if error_message:
+            return Response(
+                {"detail": error_message},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if parent_path:
+            path_parts = [part.strip() for part in parent_path.split('>') if part.strip()]
+            path_parts.append(category_name)
+        else:
+            path_parts = [category_name]
         ticket_type, ticket_type_label = determine_ticket_type(path_parts)
         
         return Response(
@@ -1160,36 +727,21 @@ class SatisfactionSurveyRateView(APIView):
                 'rating': None
             }, status=status.HTTP_404_NOT_FOUND if 'não encontrado' in error_context.get('error', '') else status.HTTP_400_BAD_REQUEST)
         
-        existing_survey = SatisfactionSurvey.objects.filter(ticket=ticket).first()
         provided_token = request.GET.get('token', '').strip()
+        comment = request.GET.get('comment', '').strip()
         
-        if existing_survey and not _validate_survey_token(existing_survey, provided_token):
+        survey, error_message = process_survey_rating(
+            ticket=ticket,
+            rating=rating,
+            provided_token=provided_token,
+            comment=comment
+        )
+        
+        if error_message:
             return render(request, 'satisfaction_survey/success.html', {
-                'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
+                'error': error_message,
                 'rating': None
             }, status=status.HTTP_403_FORBIDDEN)
-            
-            existing_survey.rating = rating
-            if not existing_survey.token:
-                existing_survey.generate_token()
-                existing_survey.save(update_fields=['rating'])
-            else:
-                existing_survey.save()
-            survey = existing_survey
-        else:
-            survey = SatisfactionSurvey.objects.create(
-                ticket=ticket,
-                rating=rating,
-                comment=''
-            )
-            survey.generate_token()
-        
-        comment = request.GET.get('comment', '').strip()
-        if comment:
-            survey.comment = comment
-            survey.save()
-        
-        _notify_n8n_survey(ticket_id=ticket_id, rating=rating, comment=survey.comment)
         
         return render(request, 'satisfaction_survey/success.html', {
             'rating': rating,
@@ -1219,6 +771,7 @@ class SatisfactionSurveyCommentView(APIView):
         survey = SatisfactionSurvey.objects.filter(ticket=ticket).first()
         provided_token = request.GET.get('token', '').strip()
         
+        from .services import _validate_survey_token
         if not _validate_survey_token(survey, provided_token):
             return render(request, 'satisfaction_survey/comment.html', {
                 'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
@@ -1244,27 +797,18 @@ class SatisfactionSurveyCommentView(APIView):
         comment = request.POST.get('comment', '').strip()
         provided_token = request.POST.get('token', request.GET.get('token', '')).strip()
         
-        survey = SatisfactionSurvey.objects.filter(ticket=ticket).first()
+        survey, error_message = process_survey_comment(
+            ticket=ticket,
+            comment=comment,
+            provided_token=provided_token
+        )
         
-        if not _validate_survey_token(survey, provided_token):
+        if error_message:
             return render(request, 'satisfaction_survey/comment.html', {
-                'error': 'Token inválido ou expirado. Esta pesquisa já foi respondida.',
+                'error': error_message,
                 'ticket': ticket,
-                'survey': survey
+                'survey': SatisfactionSurvey.objects.filter(ticket=ticket).first()
             }, status=status.HTTP_403_FORBIDDEN)
-        
-        if not survey:
-            survey = SatisfactionSurvey.objects.create(
-                ticket=ticket,
-                rating=3,
-                comment=comment
-            )
-            survey.generate_token()
-        else:
-            survey.comment = comment
-            survey.save()
-        
-        _notify_n8n_survey(ticket_id=ticket_id, rating=survey.rating, comment=comment)
         
         return render(request, 'satisfaction_survey/success.html', {
             'rating': survey.rating,
