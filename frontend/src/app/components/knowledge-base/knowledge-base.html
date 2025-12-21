@@ -6,11 +6,20 @@
     <p class="subtitle">Gere artigos de Base de Conhecimento usando Google Gemini AI para documentação técnica.</p>
   </div>
 
-  <div class="card">
+  <div class="card form-card">
     <h2>Informações do Artigo</h2>
     
     <div class="form-group">
-      <label for="article-type">Tipo do Artigo <span class="required">*</span></label>
+      <label for="article-type">
+        Tipo do Artigo <span class="required">*</span>
+        <button
+          type="button"
+          class="help-icon-button"
+          (click)="openHelpDialog()"
+          title="Ajuda sobre tipos de artigo">
+          <i class="pi pi-question-circle"></i>
+        </button>
+      </label>
       <select
         id="article-type"
         [(ngModel)]="articleType"
@@ -21,15 +30,19 @@
         <option value="operacional">Operacional</option>
         <option value="troubleshooting">Troubleshooting</option>
       </select>
-      <small class="form-hint">
-        <strong>Conceitual:</strong> Documenta arquitetura e conceitos. 
-        <strong>Operacional:</strong> Procedimentos passo a passo. 
-        <strong>Troubleshooting:</strong> Diagnóstico e solução de problemas.
-      </small>
     </div>
 
     <div class="form-group">
-      <label for="category">Categoria <span class="required">*</span></label>
+      <label for="category">
+        Categoria <span class="required">*</span>
+        <button
+          type="button"
+          class="help-icon-button"
+          (click)="openCategoryHelpDialog()"
+          title="Ajuda sobre categoria">
+          <i class="pi pi-question-circle"></i>
+        </button>
+      </label>
       <input
         id="category"
         type="text"
@@ -38,19 +51,26 @@
         [disabled]="loading"
         placeholder="Ex: RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout"
         class="w-full" />
-      <small class="form-hint">Caminho completo da categoria na Base de Conhecimento do GLPI</small>
     </div>
 
     <div class="form-group">
-      <label for="context">Contexto <span class="required">*</span></label>
+      <label for="context">
+        Contexto <span class="required">*</span>
+        <button
+          type="button"
+          class="help-icon-button"
+          (click)="openContextHelpDialog()"
+          title="Ajuda sobre contexto">
+          <i class="pi pi-question-circle"></i>
+        </button>
+      </label>
       <textarea
         id="context"
         [(ngModel)]="context"
         [disabled]="loading"
         [rows]="8"
         placeholder="Descreva o ambiente, sistemas, servidores, softwares envolvidos, configurações, etc..."
-        class="w-full"></textarea>
-      <small class="form-hint">Informações detalhadas sobre o ambiente e sistemas que serão documentados no artigo</small>
+        class="p-inputtextarea p-inputtext p-component w-full"></textarea>
     </div>
 
     <div class="form-actions">
@@ -83,10 +103,17 @@
     </div>
   }
 
-  @if (!loading && articleResult) {
-    <div class="card result-card">
-      <div class="result-header">
-        <h2>Artigo Gerado</h2>
+  <!-- Dialog de resultados (artigos gerados) -->
+  @if (articleResult) {
+    <p-dialog
+      [(visible)]="showResultsDialog"
+      [modal]="true"
+      [style]="{ width: '90vw', maxWidth: '1200px' }"
+      [contentStyle]="{ 'max-height': '85vh', 'overflow-y': 'auto' }"
+      header="Artigos Gerados"
+      [closable]="true"
+      (onHide)="closeResultsDialog()">
+      <div class="result-dialog-content">
         <div class="result-meta">
           <span class="meta-item">
             <strong>Tipo:</strong> {{ translateArticleType(articleResult.article_type) }}
@@ -94,22 +121,174 @@
           <span class="meta-item">
             <strong>Categoria:</strong> {{ articleResult.category }}
           </span>
+          <span class="meta-item">
+            <strong>Total:</strong> {{ articleResult.articles.length }} artigo(s)
+          </span>
         </div>
-      </div>
-      
-      <div class="result-actions">
-        <p-button
-          label="Copiar Artigo"
-          icon="pi pi-copy"
-          severity="secondary"
-          (onClick)="copyArticle()">
-        </p-button>
-      </div>
+        
+        @if (articleResult.articles.length > 1) {
+          <div class="result-actions">
+            <p-button
+              label="Copiar Todos"
+              icon="pi pi-copy"
+              severity="secondary"
+              (onClick)="copyAllArticles()"
+              title="Copia todos os artigos em formato HTML">
+            </p-button>
+          </div>
+        }
 
-      <div class="result-content">
-        <div class="article-text" [innerHTML]="getArticleHtml()"></div>
+        @if (articleResult.articles.length === 1) {
+          <!-- Se houver apenas um artigo, exibe diretamente sem stepper -->
+          <div class="result-actions">
+            <p-button
+              label="Copiar HTML"
+              icon="pi pi-copy"
+              severity="secondary"
+              (onClick)="copyArticle()"
+              title="Copia o artigo em formato HTML para colar no GLPI">
+            </p-button>
+          </div>
+          <div class="result-content">
+            <div class="article-text" [innerHTML]="getArticleHtml()"></div>
+          </div>
+        } @else {
+          <!-- Stepper para múltiplos artigos -->
+          <p-stepper [(value)]="currentStep" class="articles-stepper">
+            <p-step-list>
+              @for (article of getArticles(); track $index) {
+                <p-step [value]="$index + 1">{{ article.title }}</p-step>
+              }
+            </p-step-list>
+            <p-step-panels>
+              @for (article of getArticles(); track $index) {
+                <p-step-panel [value]="$index + 1">
+                  <ng-template #content let-activateCallback="activateCallback">
+                    <div class="step-content">
+                      <div class="step-actions">
+                        <p-button
+                          label="Copiar HTML"
+                          icon="pi pi-copy"
+                          severity="secondary"
+                          (onClick)="copyArticle($index)"
+                          title="Copia este artigo em formato HTML para colar no GLPI">
+                        </p-button>
+                      </div>
+                      <div class="article-text" [innerHTML]="getArticleHtmlByIndex($index)"></div>
+                    </div>
+                    <div class="step-navigation">
+                      @if ($index > 0) {
+                        <p-button
+                          label="Anterior"
+                          icon="pi pi-arrow-left"
+                          severity="secondary"
+                          (onClick)="currentStep = $index; activateCallback($index)">
+                        </p-button>
+                      }
+                      @if ($index < getArticles().length - 1) {
+                        <p-button
+                          label="Próximo"
+                          icon="pi pi-arrow-right"
+                          iconPos="right"
+                          (onClick)="currentStep = $index + 2; activateCallback($index + 2)">
+                        </p-button>
+                      }
+                    </div>
+                  </ng-template>
+                </p-step-panel>
+              }
+            </p-step-panels>
+          </p-stepper>
+        }
+      </div>
+    </p-dialog>
+  }
+
+  <!-- Dialog de ajuda sobre tipos de artigo -->
+  <p-dialog
+    [(visible)]="showHelpDialog"
+    [modal]="true"
+    [style]="{ width: '600px' }"
+    header="Tipos de Artigo"
+    [closable]="true"
+    (onHide)="closeHelpDialog()">
+    <div class="help-dialog-content">
+      <div class="help-item">
+        <h3><strong>Conceitual</strong></h3>
+        <p>Documenta arquitetura e conceitos. Explica o que é, como funciona e como os componentes se relacionam.</p>
+      </div>
+      <div class="help-item">
+        <h3><strong>Operacional</strong></h3>
+        <p>Procedimentos passo a passo. Instruções detalhadas para executar tarefas específicas.</p>
+      </div>
+      <div class="help-item">
+        <h3><strong>Troubleshooting</strong></h3>
+        <p>Diagnóstico e solução de problemas. Guia para identificar e resolver erros ou falhas.</p>
       </div>
     </div>
-  }
+  </p-dialog>
+
+  <!-- Dialog de ajuda sobre categoria -->
+  <p-dialog
+    [(visible)]="showCategoryHelpDialog"
+    [modal]="true"
+    [style]="{ width: '600px' }"
+    header="Categoria da Base de Conhecimento"
+    [closable]="true"
+    (onHide)="closeCategoryHelpDialog()">
+    <div class="help-dialog-content">
+      <div class="help-item">
+        <p>Informe o <strong>caminho completo da categoria</strong> na Base de Conhecimento do GLPI onde o artigo será criado.</p>
+        <p>O caminho deve seguir a hierarquia completa, separado por " > " (maior que com espaços).</p>
+      </div>
+      <div class="help-item">
+        <h3><strong>Exemplo:</strong></h3>
+        <p><code>RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout</code></p>
+      </div>
+      <div class="help-item">
+        <h3><strong>Dicas:</strong></h3>
+        <ul>
+          <li>Use o caminho completo desde a categoria raiz</li>
+          <li>Separe cada nível com " > " (espaço, maior que, espaço)</li>
+          <li>O caminho deve corresponder exatamente à estrutura de categorias do GLPI</li>
+          <li>Para artigos conceituais de sistemas específicos, o sistema será adicionado automaticamente ao final do caminho</li>
+        </ul>
+      </div>
+    </div>
+  </p-dialog>
+
+  <!-- Dialog de ajuda sobre contexto -->
+  <p-dialog
+    [(visible)]="showContextHelpDialog"
+    [modal]="true"
+    [style]="{ width: '700px' }"
+    header="Contexto do Ambiente"
+    [closable]="true"
+    (onHide)="closeContextHelpDialog()">
+    <div class="help-dialog-content">
+      <div class="help-item">
+        <p>Descreva detalhadamente o <strong>ambiente, sistemas, servidores, softwares e processos</strong> que serão documentados no artigo.</p>
+      </div>
+      <div class="help-item">
+        <h3><strong>O que incluir:</strong></h3>
+        <ul>
+          <li><strong>Servidores:</strong> Nomes, funções, configurações de hardware</li>
+          <li><strong>Softwares/Sistemas:</strong> Nome, versão, finalidade, fornecedor</li>
+          <li><strong>Processos:</strong> Fluxo de trabalho, procedimentos operacionais</li>
+          <li><strong>Integrações:</strong> Como os sistemas se comunicam entre si</li>
+          <li><strong>Configurações:</strong> Parâmetros importantes, portas, protocolos</li>
+          <li><strong>Ambiente:</strong> Descrição do contexto de uso</li>
+        </ul>
+      </div>
+      <div class="help-item">
+        <h3><strong>Exemplo:</strong></h3>
+        <p><em>"Tem dois servidores, playout01 e playout02 o 2 é o by. São idênticos no quesito hardware, e a única finalidade deles é rodarem o software Neoexpress, da empresa Snews. Esse software é responsável em criar a playlist das mídias que vão pro jornal. Pelo que entendi essas mídias são armazenadas no servidor de arquivos EMAM..."</em></p>
+      </div>
+      <div class="help-item">
+        <h3><strong>Importante:</strong></h3>
+        <p>Seja o mais detalhado possível. A IA usará essas informações para gerar artigos precisos e completos. Quanto mais contexto fornecido, melhor será a qualidade do artigo gerado.</p>
+      </div>
+    </div>
+  </p-dialog>
 </div>
 

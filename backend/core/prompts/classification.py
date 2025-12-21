@@ -1,5 +1,6 @@
 """
 Prompts para classificação de tickets usando Google Gemini AI.
+
 Este módulo contém os templates de prompts utilizados para classificação
 e sugestão de categorias de tickets.
 """
@@ -103,11 +104,27 @@ REGRAS DE DISTINÇÃO:
 - "Mudança > Instalação de Equipamento" = instalação PERMANENTE de infraestrutura
 - "Requisição" = solicitação | "Incidente" = problema | "Mudança" = alteração PERMANENTE na infraestrutura"""
 
-# ==================== FUNÇÕES ====================
+# =========================================================
+# FUNÇÕES
+# =========================================================
+
+# ==================== CLASSIFICAÇÃO EM CATEGORIA EXISTENTE ====================
+# Prompt para encontrar categoria já existente na lista de categorias GLPI
 
 def get_classification_prompt(categories_text: str, title: str, content: str) -> str:
     """
     Retorna o prompt para classificação de tickets com categoria existente.
+    
+    Busca uma categoria já cadastrada no GLPI que melhor se encaixa no ticket.
+    Se não encontrar categoria adequada, retorna "Nenhuma".
+    
+    Args:
+        categories_text: Lista formatada de todas as categorias GLPI disponíveis
+        title: Título do ticket a ser classificado
+        content: Conteúdo/descrição do ticket
+        
+    Returns:
+        str: Prompt formatado para classificação de ticket
     """
     classification_rules = f"""Categorias disponíveis (formato: Nível 1 > Nível 2 > Nível 3 > ...):
 {categories_text}
@@ -138,6 +155,9 @@ CATEGORIA: [caminho completo EXATO da lista]
 ID: [número do ID]"""
 
 
+# ==================== GERAÇÃO DE NOVA CATEGORIA ====================
+# Prompt para criar sugestão de nova categoria seguindo padrão hierárquico
+
 def get_suggestion_prompt(
     categories_text: str,
     similar_categories: list,
@@ -146,6 +166,19 @@ def get_suggestion_prompt(
 ) -> str:
     """
     Retorna o prompt para geração de sugestão de nova categoria.
+    
+    Gera um caminho hierárquico completo de categoria nova quando não existe
+    categoria adequada no GLPI. A sugestão segue o padrão: 
+    "TI > [Tipo] > [Área] > [Subárea] > [Categoria Específica]"
+    
+    Args:
+        categories_text: Lista formatada de todas as categorias GLPI disponíveis
+        similar_categories: Lista de categorias similares para usar como referência
+        title: Título do ticket a ser classificado
+        content: Conteúdo/descrição do ticket
+        
+    Returns:
+        str: Prompt formatado para geração de sugestão de categoria
     """
     similar_ref = ""
     if similar_categories:

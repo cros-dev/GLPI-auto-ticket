@@ -9,6 +9,8 @@
  * - **texto** → <strong>texto</strong> (negrito)
  * - *texto* → <em>texto</em> (itálico) - apenas quando não for lista
  * - `texto` → <code>texto</code> (código inline)
+ * - ==texto== → <span class="highlight">texto</span> (destaque com cor de fundo)
+ * - [Inserir print da tela ...] → <span class="print-instruction">...</span> (instruções de print)
  * - --- → <hr> (linha horizontal)
  * - # Título → <h1>Título</h1>
  * - ## Subtítulo → <h2>Subtítulo</h2>
@@ -16,7 +18,10 @@
  * - #### Subsubtítulo → <h4>Subsubtítulo</h4>
  * - Listas com * ou - (não numeradas)
  * - Listas numeradas (1., 2., etc.)
+ * - Listas aninhadas
  * - Quebras de linha
+ * 
+ * Nota: O conteúdo de itens de lista (<li>) é sempre envolvido em <p> para manter consistência estrutural.
  * 
  * @param markdown - Texto em Markdown
  * @returns HTML convertido
@@ -37,43 +42,72 @@ export function markdownToHtml(markdown: string | null | undefined): string {
 
   const lines = html.split('\n');
   const processedLines: string[] = [];
-  let inList = false;
-  let inOrderedList = false;
+  
+  // Pilha para gerenciar listas aninhadas: cada elemento é 'ul' ou 'ol'
+  const listStack: string[] = [];
+  
+  const getCurrentIndentLevel = (line: string): number => {
+    const match = line.match(/^(\s*)/);
+    return match ? Math.floor(match[1].length / 2) : 0;
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmedLine = line.trim();
+    const indentLevel = getCurrentIndentLevel(line);
 
-    if (trimmedLine.startsWith('* ')) {
-      if (!inList) {
-        if (inOrderedList) {
-          processedLines.push('</ol>');
-          inOrderedList = false;
-        }
+    if (trimmedLine.startsWith('* ') || trimmedLine.startsWith('- ')) {
+      // Ajusta a pilha de listas baseado no nível de indentação
+      while (listStack.length > indentLevel) {
+        const lastType = listStack.pop();
+        processedLines.push(`</${lastType}>`);
+      }
+      
+      // Se não há lista no nível atual, cria uma
+      if (listStack.length === indentLevel) {
         processedLines.push('<ul>');
-        inList = true;
-      }
-      const content = trimmedLine.substring(2).trim();
-      processedLines.push(`<li>${processInlineMarkdown(content)}</li>`);
-    } else if (trimmedLine.match(/^\d+\.\s/)) {
-      if (!inOrderedList) {
-        if (inList) {
-          processedLines.push('</ul>');
-          inList = false;
+        listStack.push('ul');
+      } else if (listStack.length < indentLevel) {
+        // Se o nível é maior que a pilha, preenche com listas vazias (não deveria acontecer, mas trata)
+        while (listStack.length < indentLevel) {
+          processedLines.push('<ul>');
+          listStack.push('ul');
         }
+      }
+      
+      const content = trimmedLine.replace(/^[*\-]\s+/, '').trim();
+      const processedContent = processInlineMarkdown(content);
+      // Sempre envolve o conteúdo do li em <p>
+      processedLines.push(`<li><p>${processedContent}</p></li>`);
+      
+    } else if (trimmedLine.match(/^\d+\.\s/)) {
+      // Ajusta a pilha de listas baseado no nível de indentação
+      while (listStack.length > indentLevel) {
+        const lastType = listStack.pop();
+        processedLines.push(`</${lastType}>`);
+      }
+      
+      // Se não há lista no nível atual, cria uma
+      if (listStack.length === indentLevel) {
         processedLines.push('<ol>');
-        inOrderedList = true;
+        listStack.push('ol');
+      } else if (listStack.length < indentLevel) {
+        while (listStack.length < indentLevel) {
+          processedLines.push('<ol>');
+          listStack.push('ol');
+        }
       }
+      
       const content = trimmedLine.replace(/^\d+\.\s/, '').trim();
-      processedLines.push(`<li>${processInlineMarkdown(content)}</li>`);
+      const processedContent = processInlineMarkdown(content);
+      // Sempre envolve o conteúdo do li em <p>
+      processedLines.push(`<li><p>${processedContent}</p></li>`);
+      
     } else {
-      if (inList) {
-        processedLines.push('</ul>');
-        inList = false;
-      }
-      if (inOrderedList) {
-        processedLines.push('</ol>');
-        inOrderedList = false;
+      // Fecha todas as listas quando encontramos conteúdo que não é lista
+      while (listStack.length > 0) {
+        const lastType = listStack.pop();
+        processedLines.push(`</${lastType}>`);
       }
       
       if (trimmedLine === '<hr>') {
@@ -82,17 +116,19 @@ export function markdownToHtml(markdown: string | null | undefined): string {
         processedLines.push('');
       } else if (trimmedLine.startsWith('<h')) {
         processedLines.push(trimmedLine);
+      } else if (trimmedLine.startsWith('<img')) {
+        // Preserva tags de imagem diretamente
+        processedLines.push(trimmedLine);
       } else {
         processedLines.push(`<p>${processInlineMarkdown(trimmedLine)}</p>`);
       }
     }
   }
 
-  if (inList) {
-    processedLines.push('</ul>');
-  }
-  if (inOrderedList) {
-    processedLines.push('</ol>');
+  // Fecha todas as listas abertas ao final
+  while (listStack.length > 0) {
+    const lastType = listStack.pop();
+    processedLines.push(`</${lastType}>`);
   }
 
   html = processedLines.join('\n');
@@ -114,6 +150,13 @@ export function markdownToHtml(markdown: string | null | undefined): string {
  */
 function processInlineMarkdown(text: string): string {
   let result = text;
+  
+  // Highlight: ==texto== → <span class="highlight">texto</span>
+  // Deve ser processado antes de outros processamentos para evitar conflitos
+  result = result.replace(/==([^=]+)==/g, '<span class="highlight">$1</span>');
+  
+  // Instruções de print: [Inserir print da tela ...]
+  result = result.replace(/\[Inserir print da tela ([^\]]+)\]/g, '<span class="print-instruction">Inserir print da tela $1</span>');
   
   result = result.replace(/`([^`]+)`/g, '<code>$1</code>');
   

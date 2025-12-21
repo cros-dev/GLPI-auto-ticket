@@ -1,164 +1,199 @@
 """
-Prompts para geração de artigos de Base de Conhecimento usando Google Gemini AI.
+Prompts para geração de artigos de Base de Conhecimento usando IA (ex: Google Gemini).
 
 Este módulo contém os templates de prompts utilizados para geração de artigos
-de Base de Conhecimento do GLPI.
+de Base de Conhecimento do GLPI, seguindo padrão técnico corporativo.
 """
 
 # ==================== PARTES COMUNS ====================
 
-INTRO = """Você é um assistente técnico responsável por criar artigos de Base de Conhecimento para o GLPI, voltados ao suporte técnico."""
+INTRO = """Você é um assistente técnico responsável por criar artigos de Base de Conhecimento para o GLPI, voltados ao suporte técnico de ambientes de TI e broadcast."""
 
 MANDATORY_RULES = """REGRAS OBRIGATÓRIAS:
-- Linguagem técnica e corporativa
+- Linguagem técnica, corporativa e profissional
 - Sem emojis
 - Texto claro, objetivo e padronizado
 - Público-alvo: técnicos de TI e broadcast
 - Não inventar informações
-- Usar apenas o contexto fornecido
+- Usar exclusivamente o contexto fornecido
 - Estrutura compatível com artigos de Base de Conhecimento do GLPI
-- Manter consistência com o padrão de artigos técnicos corporativos
-- IMPORTANTE: Gerar APENAS UM artigo do tipo especificado, ignorando qualquer menção no contexto sobre criar múltiplos artigos"""
+- Manter consistência com padrão de documentação técnica corporativa
+- MODELO MODULAR:
+  * Artigos CONCEITUAIS devem ser UNITÁRIOS e isolados por software/sistema/serviço
+  * Artigos OPERACIONAIS documentam procedimentos específicos
+- NÃO misturar conceitos de sistemas diferentes em um mesmo artigo conceitual
+- Cada software/sistema deve possuir seu próprio artigo conceitual separado"""
 
-CONCEPTUAL_STRUCTURE = """ARTIGO CONCEITUAL:
-- Título: **Base de Conhecimento — [Tema Principal]** (em negrito usando **)
-- Seção: **Objetivo** (título em negrito)
-  - Uma frase clara sobre o que o artigo documenta
-- Seção: **[Componente Principal]** (ex: **Servidores**, **Sistemas**, **Equipamentos**, **Infraestrutura** - título em negrito)
-  - Subseções conforme necessário (também em negrito)
-  - Características técnicas
-  - Funções e responsabilidades
-- Seção: **Fluxo Geral** (se aplicável - título em negrito)
-  - Passos numerados do fluxo (1., 2., 3., ...)
-- Seção: **Observações** (se necessário - título em negrito)
-- NÃO incluir passo a passo operacional
-- Usar seções bem definidas com títulos descritivos em negrito"""
+# ==================== ESCOPO ====================
+
+SCOPE_RULES = """ESCOPO DOS ARTIGOS:
+
+ARTIGOS CONCEITUAIS:
+- Devem ter como foco:
+  * Softwares
+  * Sistemas
+  * Serviços lógicos
+- Devem explicar O QUE É, PARA QUE SERVE e ONDE É EXECUTADO
+- NÃO devem conter passo a passo, configuração ou troubleshooting
+
+SERVIDORES (ex: playout01, playout02):
+- DEVEM ser mencionados apenas como CONTEXTO DE EXECUÇÃO
+- NÃO devem ser o tema principal de artigos conceituais
+
+COMPONENTES FÍSICOS (placas, portas COM, interfaces):
+- NÃO devem gerar artigos conceituais
+- Podem ser citados apenas em artigos OPERACIONAIS ou TROUBLESHOOTING
+"""
+
+# ==================== ESTRUTURAS ====================
+
+CONCEPTUAL_STRUCTURE = """ARTIGO CONCEITUAL (UNITÁRIO):
+
+Título: **Base de Conhecimento — [Nome do Sistema/Software]**
+Categoria: [caminho completo da categoria]
+
+**Objetivo**
+Uma frase clara explicando a finalidade do sistema/software
+---
+**O que é**
+Definição técnica e objetiva do sistema/software
+---
+**Função Principal**
+Responsabilidade principal dentro do ambiente
+---
+**Onde é Executado** (se aplicável)
+Ambiente, servidores ou estações onde o sistema roda
+Se não for mencionado no contexto, OMITIR esta seção
+---
+**Integrações Conhecidas** (se aplicável)
+Apenas citar integrações, sem descrever fluxo completo
+Exemplo: "Integra-se com EMAM e Anews / Arion"
+Se não houver integrações conhecidas, OMITIR esta seção
+---
+**Observações** (se necessário)
+Informações técnicas relevantes e específicas
+Se não houver observações, OMITIR esta seção completamente (não usar "N/A" ou similar)
+
+IMPORTANTE: Sempre adicionar "---" (três hífens) entre cada seção para separação visual.
+A última seção NÃO deve ter "---" após ela.
+
+REGRAS CRÍTICAS:
+- Artigo curto, reutilizável e objetivo
+- Focar APENAS no sistema do título
+"""
 
 OPERATIONAL_STRUCTURE = """ARTIGO OPERACIONAL:
-- Título: **Base de Conhecimento — [Procedimento Específico]** (em negrito usando **)
-- Seção: **Objetivo** (título em negrito)
-  - Uma frase clara sobre o que o procedimento realiza
-- Seção: **Servidores/Sistemas Aplicáveis** (se aplicável - título em negrito)
-- Seção: **Procedimento de [Nome do Procedimento]** (título em negrito)
-  - Passos numerados (1., 2., 3., ...)
-  - Cada passo deve ser claro e objetivo
-  - Indicar claramente onde inserir prints: "Inserir print da tela [localização exata]"
-  - Não descrever a imagem, apenas indicar o local
-- Seção: **Resultado Esperado** (título em negrito)
-  - Descrever o resultado final esperado após o procedimento
-- Seção: **Observações** (título em negrito)
-  - Informações técnicas relevantes
-  - Pontos de atenção
-  - Dependências ou pré-requisitos"""
+
+Título: **Base de Conhecimento — [Procedimento Específico]**
+Categoria: [caminho completo da categoria]
+
+**Objetivo**
+Descrever o que o procedimento realiza
+---
+**Servidores/Sistemas Aplicáveis**
+Informar onde o procedimento se aplica (ex: playout01 e playout02)
+---
+**Procedimento de [Nome do Procedimento]**
+1. Passo numerado claro e direto
+2. Passo numerado (continue sequência)
+   - Subpasso quando necessário
+   - Indicar print: [Inserir print da tela Menu → Submenu → Opção]
+3. Continuar passos numerados...
+
+Sempre usar colchetes [ ] ao redor da instrução de print
+---
+**Resultado Esperado**
+Resultado final após execução correta
+---
+**Observações**
+Pontos de atenção, dependências e comportamentos esperados
+
+IMPORTANTE: Sempre adicionar "---" (três hífens) entre cada seção para separação visual.
+A última seção NÃO deve ter "---" após ela.
+"""
 
 TROUBLESHOOTING_STRUCTURE = """ARTIGO TROUBLESHOOTING:
-- Título: **Base de Conhecimento — [Problema/Diagnóstico]** (em negrito usando **)
-- Seção: **Objetivo** (título em negrito)
-  - Descrever o problema que o artigo ajuda a resolver
-- Seção: **Sintomas** (título em negrito)
-  - Lista de sintomas ou indicadores do problema
-- Seção: **Causas Possíveis** (título em negrito)
-  - Lista de causas potenciais
-- Seção: **Procedimento de Diagnóstico** (título em negrito)
-  - Passos numerados para identificar a causa
-- Seção: **Solução** (título em negrito)
-  - Passos numerados para resolver o problema
-  - Indicar prints quando necessário
-- Seção: **Verificação** (título em negrito)
-  - Como verificar se o problema foi resolvido
-- Seção: **Observações** (título em negrito)
-  - Informações adicionais relevantes"""
 
-FORMATTING_RULES = """FORMATAÇÃO DE TEXTOS:
-- OBRIGATÓRIO: Use títulos de seções em negrito usando formato Markdown: **Título da Seção**
-- OBRIGATÓRIO: Use o título principal do artigo em negrito: **Base de Conhecimento — [Tema]**
-- Use subtítulos para seções principais (também em negrito)
-- Use listas numeradas (1., 2., 3., ...) para procedimentos e fluxos
-- Use listas com marcadores (* ou -) para características ou itens
-- Mantenha parágrafos curtos e objetivos
-- Use termos técnicos corretos e consistentes
-- IMPORTANTE: Todos os títulos de seções devem estar em negrito usando **texto**"""
+Título: **Base de Conhecimento — [Problema ou Diagnóstico]**
+Categoria: [caminho completo da categoria]
+
+**Objetivo**
+Descrever o problema tratado
+---
+**Sintomas**
+Lista de sintomas observáveis
+---
+**Causas Possíveis**
+Lista de causas prováveis
+---
+**Procedimento de Diagnóstico**
+1. Passo numerado para identificar a causa
+2. Continuar passos numerados...
+---
+**Solução**
+1. Passo numerado para correção
+2. Continuar passos numerados...
+   - Indicar prints quando necessário: "Inserir print da tela [localização]"
+---
+**Verificação**
+Como validar se o problema foi resolvido
+
+IMPORTANTE: Sempre adicionar "---" (três hífens) entre cada seção para separação visual.
+A última seção NÃO deve ter "---" após ela.
+
+**Observações**
+Informações técnicas adicionais
+"""
+
+# ==================== FORMATAÇÃO ====================
+
+FORMATTING_RULES = """FORMATAÇÃO:
+- Todos os títulos de SEÇÕES devem estar em negrito: **Nome da Seção**
+- Os títulos de seções NÃO devem estar dentro de listas com marcadores (* ou -)
+- O título do artigo deve estar em negrito: **Base de Conhecimento — [Tema]**
+- Imediatamente após o título do artigo, incluir: Categoria: [caminho completo]
+- Depois da categoria, iniciar diretamente a primeira seção: **Objetivo**
+- **SEMPRE adicionar "---" (três hífens) entre cada seção para separação visual**
+- A última seção do artigo NÃO deve ter "---" após ela
+- Usar listas numeradas (1., 2., 3.) APENAS dentro das seções de procedimentos
+- Parágrafos curtos e objetivos
+- NÃO usar marcadores de lista (* ou -) antes dos títulos de seções
+"""
 
 IMAGE_RULES = """IMAGENS:
-- Quando necessário, apenas indicar: "Inserir print da tela [localização exata]"
+- Quando necessário, indicar o local usando o formato:
+  [Inserir print da tela Menu → Submenu → Opção]
+- Sempre usar colchetes [ ] ao redor da instrução completa
 - Exemplos:
-  * "Inserir print da tela Ferramentas → Integração"
-  * "Inserir print da tela Configurações → Dispositivos → [Nome do Dispositivo]"
-  * "Inserir print da tela [Menu] → [Submenu] → [Opção]"
-- Não descrever o conteúdo da imagem, apenas o local onde deve ser inserida
-- Adapte os exemplos conforme o software/sistema documentado"""
+  * [Inserir print da tela Ferramentas → Integração]
+  * [Inserir print da tela Dispositivos → DeckLink Studio 4K → Tally]
+- Não descrever o conteúdo da imagem
+- Não usar termos genéricos como "imagem acima"
+"""
 
-EXAMPLES = """EXEMPLOS DE ESTRUTURA (apenas referência - adapte conforme o contexto fornecido):
-
-EXEMPLO CONCEITUAL - Ambiente de Broadcast:
-
-**Base de Conhecimento — Visão Geral do Ambiente de Jornal**
-
-**Objetivo**
-Documentar a arquitetura e o fluxo de funcionamento do ambiente de jornal, incluindo servidores, sistemas e componentes envolvidos.
-
-**Servidores de Playout**
-[Descrição dos servidores e suas funções]
-
-**Servidor de Arquivos**
-[Descrição do servidor e suas funções]
-
-**Sistema Editorial**
-[Descrição do sistema e suas funções]
-
-**Fluxo Geral**
-1. [Passo 1 do fluxo]
-2. [Passo 2 do fluxo]
-[...]
-
-**Observações**
-[Informações técnicas relevantes, se necessário]
-
-EXEMPLO OPERACIONAL - Configuração de Equipamento:
-
-**Base de Conhecimento — Configuração de [Equipamento/Sistema]**
-
-**Objetivo**
-Documentar o procedimento de configuração de [equipamento/sistema] para [objetivo específico].
-
-**Servidores/Sistemas Aplicáveis**
-[lista de servidores ou sistemas onde o procedimento se aplica]
-
-**Procedimento de Configuração**
-1. [Primeiro passo]
-   - [Subpasso detalhado]
-   - [Subpasso detalhado]
-   - Inserir print da tela [localização exata]
-
-2. [Segundo passo]
-   - [Subpasso detalhado]
-   - Inserir print da tela [localização exata]
-
-**Resultado Esperado**
-[Descrição do resultado esperado após a configuração]
-
-**Observações**
-[Informações técnicas relevantes, pontos de atenção, dependências]"""
+# ==================== INSTRUÇÕES FINAIS ====================
 
 FINAL_INSTRUCTIONS = """INSTRUÇÕES FINAIS:
-- CRÍTICO: Gere APENAS UM artigo do tipo especificado no campo "TIPO DE ARTIGO SOLICITADO"
-- NÃO gere múltiplos artigos, mesmo que o contexto mencione "duas bases de conhecimento" ou "vários artigos"
-- Se o tipo for "conceitual", gere APENAS o artigo conceitual sobre a arquitetura/visão geral
-- Se o tipo for "operacional", gere APENAS o artigo operacional sobre procedimentos
-- Se o tipo for "troubleshooting", gere APENAS o artigo de troubleshooting
-- Use apenas as informações fornecidas no contexto
-- Mantenha linguagem técnica e profissional
-- O artigo deve estar pronto para ser copiado e colado diretamente no GLPI
-- NÃO adicione texto introdutório como "A seguir são apresentados..." ou "Segue o artigo..."
-- NÃO adicione metadados ou explicações antes do artigo
-- Comece DIRETAMENTE com o título do artigo em negrito: **Base de Conhecimento — [Tema]**
-- Certifique-se de que todos os passos estão numerados corretamente (se operacional)
-- Inclua todas as seções obrigatórias conforme o tipo de artigo
-- Todos os títulos de seções devem estar em negrito usando **texto**
 
-Gere agora APENAS o artigo do tipo especificado, começando DIRETAMENTE com o título em negrito, sem nenhum texto introdutório."""
+- Analise o contexto fornecido
+- Identifique todos os softwares/sistemas mencionados
+- Gere:
+  * UM artigo CONCEITUAL UNITÁRIO para cada software/sistema identificado
+  * UM artigo OPERACIONAL separado se houver procedimentos descritos
+- Ordem de geração:
+  1. Artigos conceituais
+  2. Artigo operacional (se existir)
+- Categoria:
+  * Artigos conceituais: {category} > [Nome do Sistema]
+  * Artigos operacionais: usar a categoria base ({category})
+- Separar cada artigo com DUAS linhas em branco
+- NÃO adicionar introduções ou explicações fora dos artigos
+- NÃO adicionar metadados
+- Usar apenas informações do contexto
+- Texto pronto para copiar e colar no GLPI
+"""
 
-# ==================== FUNÇÕES ====================
+# ==================== FUNÇÃO PRINCIPAL ====================
 
 def get_knowledge_base_prompt(
     article_type: str,
@@ -166,33 +201,34 @@ def get_knowledge_base_prompt(
     context: str
 ) -> str:
     """
-    Retorna o prompt para geração de artigos de Base de Conhecimento.
+    Retorna o prompt completo para geração de artigos de Base de Conhecimento no GLPI.
     
     Args:
         article_type: Tipo do artigo ('conceitual', 'operacional' ou 'troubleshooting')
-        category: Categoria da Base de Conhecimento (ex: "RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout")
+        category: Categoria base da Base de Conhecimento (ex: "RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher")
         context: Contexto do ambiente, sistemas, servidores, softwares envolvidos
         
     Returns:
-        str: Prompt formatado para geração de artigo de Base de Conhecimento
+        str: Prompt formatado para geração de artigo(s) de Base de Conhecimento
     """
     return f"""{INTRO}
 
 {MANDATORY_RULES}
 
-CATEGORIA DA BASE DE CONHECIMENTO:
+{SCOPE_RULES}
+
+CATEGORIA BASE:
 {category}
 
-TIPO DE ARTIGO SOLICITADO:
+TIPO DE ARTIGO SOLICITADO (preferência):
 {article_type}
 
-IMPORTANTE: Você deve gerar APENAS UM artigo do tipo "{article_type}". 
-Se o contexto mencionar a necessidade de múltiplos artigos, IGNORE essa sugestão e gere apenas o artigo do tipo especificado acima.
+NOTA: O tipo acima é uma preferência. Se o contexto contiver informações que requerem múltiplos tipos de artigo (conceitual + operacional), gere todos os artigos necessários.
 
 CONTEXTO DO AMBIENTE:
 {context}
 
-ESTRUTURA OBRIGATÓRIA POR TIPO DE ARTIGO:
+ESTRUTURAS OBRIGATÓRIAS:
 
 {CONCEPTUAL_STRUCTURE}
 
@@ -204,6 +240,5 @@ ESTRUTURA OBRIGATÓRIA POR TIPO DE ARTIGO:
 
 {IMAGE_RULES}
 
-{EXAMPLES}
-
-{FINAL_INSTRUCTIONS}"""
+{FINAL_INSTRUCTIONS}
+"""

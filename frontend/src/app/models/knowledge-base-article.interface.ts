@@ -13,11 +13,19 @@ export interface KnowledgeBaseArticleRequest {
 }
 
 /**
+ * Interface para um artigo individual de Base de Conhecimento.
+ */
+export interface KnowledgeBaseArticleItem {
+  /** Texto completo do artigo */
+  content: string;
+}
+
+/**
  * Interface para resposta de geração de artigo de Base de Conhecimento.
  */
 export interface KnowledgeBaseArticleResponse {
-  /** Texto completo do artigo gerado */
-  article: string;
+  /** Lista de artigos gerados (pode conter múltiplos artigos) */
+  articles: KnowledgeBaseArticleItem[];
   
   /** Tipo do artigo gerado */
   article_type: string;

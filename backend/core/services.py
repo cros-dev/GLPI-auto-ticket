@@ -131,7 +131,7 @@ def _parse_gemini_error(exception: Exception) -> Tuple[str, str]:
     return 'unknown', f'Erro ao comunicar com a API do Gemini: {error_str}'
 
 
-def get_category_path(category):
+def get_category_path(category) -> List[str]:
     """
     Retorna o caminho completo da hierarquia de categorias como lista.
     
@@ -139,8 +139,8 @@ def get_category_path(category):
         category: Instância de GlpiCategory
         
     Returns:
-        list: Lista de nomes de categorias do nível raiz até a categoria atual
-        Exemplo: ['Requisição', 'Acesso', 'AD', 'Criação de Usuário / Conta']
+        List[str]: Lista de nomes de categorias do nível raiz até a categoria atual.
+                   Exemplo: ['Requisição', 'Acesso', 'AD', 'Criação de Usuário / Conta']
     """
     if hasattr(category, 'full_path') and category.full_path:
         return [part.strip() for part in category.full_path.split('>') if part.strip()]
@@ -153,16 +153,17 @@ def get_category_path(category):
     return path
 
 
-def determine_ticket_type(path_parts):
+def determine_ticket_type(path_parts: List[str]) -> Tuple[Optional[int], Optional[str]]:
     """
     Determina se uma categoria pertence a Incidente ou Requisição.
     
     Args:
-        path_parts (list[str]): Caminho da categoria
+        path_parts: Caminho da categoria (lista de strings)
         
     Returns:
-        tuple: (ticket_type, ticket_type_label)
-               ticket_type -> 1 (incidente), 2 (requisição), None (indefinido)
+        Tuple[Optional[int], Optional[str]]: (ticket_type, ticket_type_label)
+            - ticket_type: 1 (incidente), 2 (requisição), None (indefinido)
+            - ticket_type_label: 'incidente', 'requisição', ou None
     """
     if not path_parts:
         return None, None
@@ -178,12 +179,13 @@ def determine_ticket_type(path_parts):
     return None, None
 
 
-def get_categories_for_ai():
+def get_categories_for_ai() -> str:
     """
     Retorna lista formatada de categorias para uso em prompts de IA.
     
     Returns:
-        str: String formatada com todas as categorias hierárquicas
+        str: String formatada com todas as categorias hierárquicas, uma por linha,
+             no formato "- Categoria > Subcategoria (ID: 123)"
     """
     categories = GlpiCategory.objects.all()
     category_list = []
@@ -328,7 +330,7 @@ def _get_similar_categories_for_reference(ticket_text: str) -> List[str]:
 def classify_ticket_with_gemini(
     title: str,
     content: str
-) -> Optional[Dict[str, any]]:
+) -> Optional[Dict[str, Any]]:
     """
     Classificação usando Google Gemini AI.
     
@@ -336,11 +338,11 @@ def classify_ticket_with_gemini(
     e conteúdo, comparando com as categorias GLPI disponíveis.
     
     Args:
-        title (str): Título do ticket
-        content (str): Conteúdo/descrição do ticket
+        title: Título do ticket
+        content: Conteúdo/descrição do ticket
         
     Returns:
-        Optional[Dict[str, any]]: Dicionário com:
+        Optional[Dict[str, Any]]: Dicionário com:
             - 'suggested_category_name': Nome completo da categoria sugerida (caminho hierárquico)
             - 'suggested_category_id': ID GLPI da categoria
             - 'confidence': 'high' ou 'medium'
@@ -440,9 +442,9 @@ def generate_category_suggestion(
     Antes de gerar, verifica se já existe uma categoria similar no banco para evitar duplicatas.
     
     Args:
-        title (str): Título do ticket
-        content (str): Conteúdo/descrição do ticket
-        ticket_id (Optional[int]): ID do ticket para vincular a sugestão
+        title: Título do ticket
+        content: Conteúdo/descrição do ticket
+        ticket_id: ID do ticket para vincular a sugestão (opcional)
         
     Returns:
         Optional[str]: Caminho completo sugerido ou None se não conseguir gerar
@@ -507,10 +509,10 @@ def save_category_suggestion(
     Salva uma sugestão de categoria para revisão manual.
     
     Args:
-        ticket_id (int): ID do ticket
-        suggested_path (str): Caminho completo sugerido
-        title (str): Título do ticket
-        content (str): Conteúdo do ticket
+        ticket_id: ID do ticket
+        suggested_path: Caminho completo sugerido
+        title: Título do ticket
+        content: Conteúdo do ticket
         
     Returns:
         Optional[CategorySuggestion]: Instância criada ou None se houver erro
@@ -551,19 +553,19 @@ def classify_ticket(
     title: str,
     content: str,
     ticket_id: Optional[int] = None
-) -> Optional[Dict[str, any]]:
+) -> Optional[Dict[str, Any]]:
     """
     Classifica um ticket usando Google Gemini AI.
     
     Se não encontrar categoria exata, tenta gerar uma sugestão e salva para revisão manual.
     
     Args:
-        title (str): Título do ticket
-        content (str): Conteúdo/descrição do ticket
-        ticket_id (Optional[int]): ID do ticket para vincular sugestões
+        title: Título do ticket
+        content: Conteúdo/descrição do ticket
+        ticket_id: ID do ticket para vincular sugestões (opcional)
         
     Returns:
-        Optional[Dict[str, any]]: Dicionário com:
+        Optional[Dict[str, Any]]: Dicionário com:
             - 'suggested_category_name': Nome completo da categoria sugerida (caminho hierárquico)
             - 'suggested_category_id': ID GLPI da categoria
             - 'confidence': 'high' (quando IA responde)
@@ -588,26 +590,76 @@ def classify_ticket(
 # BASE DE CONHECIMENTO
 # =========================================================
 
+def _split_articles(text: str) -> list[Dict[str, str]]:
+    """
+    Separa múltiplos artigos de Base de Conhecimento em uma lista.
+    
+    Detecta o início de cada artigo pelo padrão "**Base de Conhecimento —".
+    Cada artigo é retornado como um dicionário com 'content' contendo o texto completo.
+    
+    Args:
+        text: Texto completo com potencialmente múltiplos artigos
+        
+    Returns:
+        Lista de dicionários, cada um contendo:
+        - 'content': Texto completo do artigo
+    """
+    if not text or not text.strip():
+        return []
+    
+    articles = []
+    lines = text.split('\n')
+    current_article_lines = []
+    
+    for line in lines:
+        # Detecta início de novo artigo pelo padrão "**Base de Conhecimento —"
+        if line.strip().startswith('**Base de Conhecimento —'):
+            # Se já temos um artigo em construção, salva ele
+            if current_article_lines:
+                article_text = '\n'.join(current_article_lines).strip()
+                if article_text:
+                    articles.append({'content': article_text})
+                current_article_lines = []
+        
+        current_article_lines.append(line)
+    
+    # Adiciona o último artigo
+    if current_article_lines:
+        article_text = '\n'.join(current_article_lines).strip()
+        if article_text:
+            articles.append({'content': article_text})
+    
+    # Se não encontrou nenhum padrão de separação, retorna o texto como um único artigo
+    if not articles:
+        articles.append({'content': text.strip()})
+    
+    return articles
+
+
 def generate_knowledge_base_article(
     article_type: str,
     category: str,
     context: str
-) -> Optional[Dict[str, any]]:
+) -> Optional[Dict[str, Any]]:
     """
     Gera um artigo de Base de Conhecimento usando Google Gemini AI.
     
     Args:
         article_type: Tipo do artigo ('conceitual', 'operacional' ou 'troubleshooting')
-        category: Categoria da Base de Conhecimento (ex: "RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout")
+        category: Categoria da Base de Conhecimento.
+                  Exemplo: "RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout"
         context: Contexto do ambiente, sistemas, servidores, softwares envolvidos
         
     Returns:
-        Optional[Dict[str, any]]: Dicionário com:
-            - 'article': Texto completo do artigo gerado
+        Optional[Dict[str, Any]]: Dicionário com:
+            - 'articles': Lista de artigos (cada um com 'content')
             - 'article_type': Tipo do artigo
             - 'category': Categoria informada
         Retorna None se houver erro ou se a API não estiver configurada.
         Retorna dict com 'error' e 'message' em caso de erro na API.
+        
+        Nota: A resposta contém uma lista de artigos, pois a IA pode gerar múltiplos
+        artigos (um para cada sistema/software identificado no contexto).
     """
     if article_type.lower() not in VALID_ARTICLE_TYPES:
         logger.warning(f"Tipo de artigo inválido: {article_type}. Tipos válidos: {VALID_ARTICLE_TYPES}")
@@ -638,10 +690,13 @@ def generate_knowledge_base_article(
         if lines and lines[0].lower().startswith(('artigo:', 'base de conhecimento:')):
             response_text = '\n'.join(lines[1:]).strip()
         
-        logger.info(f"Artigo de Base de Conhecimento gerado com sucesso. Tipo: {article_type}, Categoria: {category}")
+        # Separa múltiplos artigos se houver
+        articles = _split_articles(response_text)
+        
+        logger.info(f"Artigo(s) de Base de Conhecimento gerado(s) com sucesso. Tipo: {article_type}, Categoria: {category}, Total: {len(articles)}")
         
         return {
-            'article': response_text,
+            'articles': articles,
             'article_type': article_type.lower(),
             'category': category.strip()
         }

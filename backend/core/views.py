@@ -7,6 +7,7 @@ Este módulo contém todas as views que expõem endpoints da API:
 - Sugestões de categorias: listagem, prévia, aprovação e rejeição
 - Pesquisa de satisfação: endpoints públicos para avaliação
 """
+from typing import Optional, Tuple
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -46,7 +47,7 @@ logger = logging.getLogger(__name__)
 # FUNÇÕES AUXILIARES
 # =========================================================
 
-def _find_category_by_path(path):
+def _find_category_by_path(path: str) -> Optional[GlpiCategory]:
     """
     Busca uma categoria existente no banco percorrendo o caminho informado.
     
@@ -54,7 +55,7 @@ def _find_category_by_path(path):
         path: Caminho hierárquico (ex.: "TI > Requisição")
         
     Returns:
-        GlpiCategory ou None: Categoria encontrada ou None se não existir
+        Optional[GlpiCategory]: Categoria encontrada ou None se não existir
     """
     if not path:
         return None
@@ -167,12 +168,13 @@ def _notify_n8n_survey(*, ticket_id, rating, comment):
         logger.error(f"Erro ao notificar n8n: {str(e)}")
 
 
-def _get_glpi_base_url():
+def _get_glpi_base_url() -> Optional[str]:
     """
     Retorna a URL base da API Legacy do GLPI.
     
     Returns:
-        str: URL base formatada (ex: "http://172.16.0.180:81/api.php/v1")
+        Optional[str]: URL base formatada (ex: "http://172.16.0.180:81/api.php/v1") 
+                      ou None se não estiver configurada
     """
     glpi_url = getattr(settings, 'GLPI_LEGACY_API_URL', None)
     if not glpi_url:
@@ -184,7 +186,7 @@ def _get_glpi_base_url():
     return f"{glpi_url}/api.php/v1"
 
 
-def _get_suggestion_or_404(pk):
+def _get_suggestion_or_404(pk: int) -> Tuple[Optional[CategorySuggestion], Optional[Response]]:
     """
     Busca uma sugestão de categoria ou retorna erro 404.
     
@@ -192,9 +194,10 @@ def _get_suggestion_or_404(pk):
         pk: ID da sugestão
         
     Returns:
-        tuple: (suggestion, error_response)
-               suggestion: Instância de CategorySuggestion ou None
-               error_response: Response com erro 404 ou None
+        Tuple[Optional[CategorySuggestion], Optional[Response]]: 
+            (suggestion, error_response)
+            - suggestion: Instância de CategorySuggestion ou None
+            - error_response: Response com erro 404 ou None
     """
     try:
         suggestion = CategorySuggestion.objects.get(pk=pk)
@@ -206,7 +209,7 @@ def _get_suggestion_or_404(pk):
         )
 
 
-def _validate_and_get_suggestion(pk):
+def _validate_and_get_suggestion(pk: int) -> Tuple[Optional[CategorySuggestion], Optional[Response]]:
     """
     Valida e retorna uma sugestão de categoria pendente.
     
@@ -214,9 +217,10 @@ def _validate_and_get_suggestion(pk):
         pk: ID da sugestão
         
     Returns:
-        tuple: (suggestion, error_response)
-               suggestion: Instância de CategorySuggestion ou None
-               error_response: Response com erro ou None
+        Tuple[Optional[CategorySuggestion], Optional[Response]]:
+            (suggestion, error_response)
+            - suggestion: Instância de CategorySuggestion ou None
+            - error_response: Response com erro ou None
     """
     suggestion, error_response = _get_suggestion_or_404(pk)
     if error_response:
@@ -231,7 +235,7 @@ def _validate_and_get_suggestion(pk):
     return suggestion, None
 
 
-def _parse_suggestion_path(suggested_path: str):
+def _parse_suggestion_path(suggested_path: str) -> Tuple[str, str, Optional[Response]]:
     """
     Faz parse do caminho sugerido e valida.
     
@@ -239,10 +243,10 @@ def _parse_suggestion_path(suggested_path: str):
         suggested_path: Caminho completo sugerido
         
     Returns:
-        tuple: (category_name, parent_path, error_response)
-               category_name: Nome da categoria ou None
-               parent_path: Caminho do pai ou None
-               error_response: Response com erro ou None
+        Tuple[str, str, Optional[Response]]: (category_name, parent_path, error_response)
+            - category_name: Nome da categoria ou string vazia
+            - parent_path: Caminho do pai ou string vazia
+            - error_response: Response com erro ou None se válido
     """
     suggested_path = (suggested_path or '').strip()
     path_parts = [p.strip() for p in suggested_path.split('>') if p.strip()]
@@ -1295,7 +1299,10 @@ class KnowledgeBaseArticleView(APIView):
         
         Retorna:
         {
-            "article": "Texto completo do artigo gerado",
+            "articles": [
+                {"content": "Texto completo do artigo 1"},
+                {"content": "Texto completo do artigo 2"}
+            ],
             "article_type": "conceitual",
             "category": "RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout"
         }

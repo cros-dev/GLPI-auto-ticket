@@ -236,15 +236,25 @@ class KnowledgeBaseArticleRequestSerializer(serializers.Serializer):
     )
 
 
+class KnowledgeBaseArticleItemSerializer(serializers.Serializer):
+    """
+    Serializer para um artigo individual de Base de Conhecimento.
+    
+    Campos:
+        content: Texto completo do artigo
+    """
+    content = serializers.CharField(help_text="Texto completo do artigo")
+
+
 class KnowledgeBaseArticleResponseSerializer(serializers.Serializer):
     """
     Serializer para resposta de geração de artigo de Base de Conhecimento.
     
     Campos:
-        article: Texto completo do artigo gerado
+        articles: Lista de artigos gerados (pode conter múltiplos artigos)
         article_type: Tipo do artigo gerado
         category: Categoria informada
     """
-    article = serializers.CharField(help_text="Texto completo do artigo gerado")
+    articles = KnowledgeBaseArticleItemSerializer(many=True, help_text="Lista de artigos gerados")
     article_type = serializers.CharField(help_text="Tipo do artigo gerado")
     category = serializers.CharField(help_text="Categoria da Base de Conhecimento")
