@@ -1,0 +1,132 @@
+/* =========================================================
+ * CSS VARIABLES / DESIGN TOKENS
+ * Todas as variáveis CSS globais do projeto
+ * ========================================================= */
+
+:root {
+  /* Layout */
+  --sidebar-width: 280px;
+  --topbar-height: 64px;
+  --content-padding: 1rem;
+  
+  /* Tipografia */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-mono: 'Courier New', Courier, monospace;
+  
+  /* Tamanhos de fonte */
+  --font-size-xs: 0.75rem;    /* 12px */
+  --font-size-sm: 0.875rem;   /* 14px */
+  --font-size-base: 1rem;    /* 16px - padrão */
+  --font-size-md: 1.125rem;  /* 18px */
+  --font-size-lg: 1.25rem;   /* 20px */
+  --font-size-xl: 1.5rem;    /* 24px */
+  --font-size-2xl: 1.75rem;  /* 28px */
+  --font-size-3xl: 2rem;     /* 32px */
+  
+  /* Tamanhos específicos para elementos */
+  --font-size-label: 0.9rem;
+  --font-size-input: 1rem;
+  --font-size-small: 0.875rem;
+  --font-size-body-small: 0.95rem;  /* Texto de corpo pequeno */
+  --font-size-code: 0.9em;
+  
+  /* =========================================================
+   * Tokens do APP (Light por padrão)
+   * - PrimeNG controla --p-*
+   * - Layout e componentes usam --app-* (ou aliases compat)
+   * ========================================================= */
+
+  /* Base */
+  --app-primary: var(--p-primary-color);
+  --app-text: var(--p-text-color);
+  --app-text-muted: var(--p-text-muted-color);
+  --app-border: var(--p-content-border-color);
+  --app-bg: var(--p-surface-50);
+  --app-bg-disabled: var(--p-surface-200);
+
+  /* Superfícies */
+  /* Requisito: cards/caixas mais claros (surface-0) em ambos os modos */
+  --app-surface-card: var(--p-surface-0);
+
+  /* Destaques/seleção (para usos pontuais em componentes custom) */
+  --app-highlight-bg: var(--p-highlight-background);
+  --app-highlight-text: var(--p-highlight-color);
+
+  /* Bordas sutis */
+  --app-border-subtle: color-mix(in srgb, var(--app-border) 55%, transparent);
+
+  /* Sidebar/Sidenav (segue o modo) */
+  --app-sidebar-bg: var(--p-surface-0);
+  --app-sidebar-text: var(--p-text-color);
+  --app-sidebar-border: var(--p-content-border-color);
+  --app-sidebar-hover-bg: var(--p-content-hover-background);
+  --app-sidebar-active-bg: var(--p-highlight-background);
+
+  /* Topbar (segue o modo) */
+  --app-topbar-bg: var(--p-surface-0);
+  --app-topbar-text: var(--p-text-color);
+  --app-topbar-border: var(--p-content-border-color);
+  --app-topbar-brand: var(--p-primary-color);
+
+  /* =========================================================
+   * Aliases compat (para não quebrar CSS existente)
+   * ========================================================= */
+  --primary-color: var(--app-primary);
+  --text-color: var(--app-text);
+  --text-color-secondary: var(--app-text-muted);
+  --text-color-tertiary: var(--app-text-muted);
+  --border-color: var(--app-border);
+  --bg-color: var(--app-bg);
+  --bg-disabled: var(--app-bg-disabled);
+  --border-color-subtle: var(--app-border-subtle);
+  --highlight-bg: var(--app-highlight-bg);
+  --highlight-text: var(--app-highlight-text);
+
+  --sidebar-bg-color: var(--app-sidebar-bg);
+  --sidebar-text-color: var(--app-sidebar-text);
+  --sidebar-border-color: var(--app-sidebar-border);
+  --sidebar-hover-bg: var(--app-sidebar-hover-bg);
+  --sidebar-active-bg: var(--app-sidebar-active-bg);
+
+  --topbar-bg-color: var(--app-topbar-bg);
+  --topbar-text-color: var(--app-topbar-text);
+  --topbar-border-color: var(--app-topbar-border);
+  --topbar-brand-color: var(--app-topbar-brand);
+  
+  /* Espaçamentos */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  
+  /* Bordas */
+  --border-radius: 8px;
+  --border-radius-sm: 4px;
+  
+  /* Transições */
+  --transition: 0.2s ease;
+  
+  /* Sombras */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+:root.app-dark {
+  /* Dark overrides (layout segue o modo) */
+  --app-bg: var(--p-surface-950);
+  --app-bg-disabled: var(--p-surface-800);
+
+  /* No dark, cards/caixas precisam contrastar com o fundo sem ficar "brancos" */
+  --app-surface-card: var(--p-surface-900);
+
+  --app-sidebar-bg: var(--p-surface-900);
+  --app-sidebar-text: var(--p-surface-0);
+  --app-sidebar-border: color-mix(in srgb, var(--p-surface-0) 12%, transparent);
+  --app-sidebar-hover-bg: var(--p-surface-800);
+
+  --app-topbar-bg: var(--p-surface-900);
+  --app-topbar-text: var(--p-surface-0);
+  --app-topbar-border: color-mix(in srgb, var(--p-surface-0) 12%, transparent);
+}
+

@@ -32,7 +32,7 @@ class GlpiLegacyClient:
         Inicializa o cliente GLPI Legacy.
         
         Args:
-            base_url: URL base da API (ex: "http://172.16.0.180:81")
+            base_url: URL completa da API (ex: "http://172.16.0.180:81/apirest.php")
             user: Usuário para autenticação
             password: Senha para autenticação
             app_token: Token da aplicação (opcional)
@@ -50,19 +50,15 @@ class GlpiLegacyClient:
         Normaliza a URL base da API GLPI.
         
         Args:
-            url: URL bruta do .env
+            url: URL completa do .env (ex: "http://172.16.0.180:81/apirest.php")
             
         Returns:
-            Optional[str]: URL formatada (ex: "http://172.16.0.180:81/api.php/v1") 
-                          ou None se não estiver configurada
+            Optional[str]: URL sem barra final ou None se não estiver configurada
         """
         if not url:
             return None
         
-        url = url.rstrip('/')
-        if url.endswith('/api.php/v1'):
-            return url
-        return f"{url}/api.php/v1"
+        return url.rstrip('/')
     
     def get_session_token(self) -> str:
         """

@@ -45,3 +45,40 @@
   background: var(--sidebar-active-bg);
 }
 
+/* Estilos para sub-itens do menu */
+:host ::ng-deep .sidenav-menu .p-submenu-header {
+  padding: var(--spacing-md) var(--spacing-lg);
+  color: var(--sidebar-text-color);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+:host ::ng-deep .sidenav-menu .p-submenu-list {
+  padding: 0;
+  background: transparent;
+}
+
+:host ::ng-deep .sidenav-menu .p-submenu-list .p-menuitem-link {
+  padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-sm) calc(var(--spacing-lg) + var(--spacing-md));
+  font-size: var(--font-size-sm);
+}
+
+:host ::ng-deep .sidenav-menu .p-submenu-list .p-menuitem-link .p-menuitem-icon {
+  font-size: var(--font-size-xs);
+  margin-right: var(--spacing-sm);
+}
+
+:host ::ng-deep .sidenav-menu .p-submenu-list .p-menuitem-link:hover {
+  background: var(--sidebar-hover-bg);
+  padding-left: calc(var(--spacing-lg) + var(--spacing-md) + 2px);
+}
+
+:host ::ng-deep .sidenav-menu .p-submenu-list .p-menuitem-link.p-menuitem-link-active {
+  background: var(--sidebar-active-bg);
+  border-left: 2px solid var(--primary-color);
+  padding-left: calc(var(--spacing-lg) + var(--spacing-md) - 2px);
+}
+

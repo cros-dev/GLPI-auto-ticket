@@ -19,13 +19,13 @@
 }
 
 .logo {
-  font-size: 1.5rem;
+  font-size: var(--font-size-xl);
   font-weight: 700;
   color: var(--topbar-brand-color);
 }
 
 .title {
-  font-size: 1rem;
+  font-size: var(--font-size-base);
   font-weight: 500;
   color: var(--topbar-text-color);
 }

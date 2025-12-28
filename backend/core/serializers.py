@@ -7,7 +7,7 @@ Este módulo contém todos os serializers usados para:
 - Transformação entre modelos Django e JSON
 """
 from rest_framework import serializers
-from .models import Ticket, GlpiCategory, SatisfactionSurvey, CategorySuggestion
+from .models import Ticket, GlpiCategory, SatisfactionSurvey, CategorySuggestion, KnowledgeBaseArticle
 from .constants import VALID_ARTICLE_TYPES
 
 
@@ -219,10 +219,12 @@ class CategorySuggestionListSerializer(serializers.ModelSerializer):
     Serializer para listagem de sugestões de categorias.
     
     Usado para serializar sugestões de categorias na listagem.
+    Suporta sugestões de tickets reais e previews (sem ticket).
     """
-    ticket_id = serializers.IntegerField(source='ticket.id', read_only=True)
+    ticket_id = serializers.SerializerMethodField()
     ticket_title = serializers.CharField(read_only=True)
     ticket_content = serializers.CharField(read_only=True)
+    source = serializers.CharField(read_only=True)
     
     class Meta:
         model = CategorySuggestion
@@ -233,11 +235,16 @@ class CategorySuggestionListSerializer(serializers.ModelSerializer):
             'ticket_title',
             'ticket_content',
             'status',
+            'source',
             'created_at',
             'reviewed_at',
             'reviewed_by',
             'notes'
         ]
+    
+    def get_ticket_id(self, obj):
+        """Retorna o ID do ticket se existir, None caso contrário."""
+        return obj.ticket.id if obj.ticket else None
 
 
 class KnowledgeBaseArticleRequestSerializer(serializers.Serializer):
@@ -262,14 +269,38 @@ class KnowledgeBaseArticleRequestSerializer(serializers.Serializer):
     )
 
 
+class KnowledgeBaseArticleListSerializer(serializers.ModelSerializer):
+    """
+    Serializer para listagem de artigos de Base de Conhecimento.
+    
+    Usado para serializar artigos na listagem.
+    """
+    
+    class Meta:
+        model = KnowledgeBaseArticle
+        fields = [
+            'id',
+            'article_type',
+            'category',
+            'context',
+            'content',
+            'content_html',
+            'source',
+            'created_at',
+            'updated_at'
+        ]
+
+
 class KnowledgeBaseArticleItemSerializer(serializers.Serializer):
     """
     Serializer para um artigo individual de Base de Conhecimento.
     
     Campos:
-        content: Texto completo do artigo
+        content: Texto completo do artigo em Markdown
+        content_html: Texto completo do artigo convertido para HTML
     """
-    content = serializers.CharField(help_text="Texto completo do artigo")
+    content = serializers.CharField(help_text="Texto completo do artigo em Markdown")
+    content_html = serializers.CharField(help_text="Texto completo do artigo convertido para HTML")
 
 
 class KnowledgeBaseArticleResponseSerializer(serializers.Serializer):

@@ -1,4 +1,4 @@
-import { Component, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -6,12 +6,12 @@ import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { DialogModule } from 'primeng/dialog';
 import { StepperModule } from 'primeng/stepper';
+import { SelectModule } from 'primeng/select';
 import { ApiService } from '../../services/api.service';
 import { NotificationService } from '../../services/notification.service';
 import { getHttpErrorInfo } from '../../utils/error-handler.utils';
-import { markdownToHtml } from '../../utils/markdown.utils';
 import { BreadcrumbComponent, BreadcrumbItem } from '../breadcrumb/breadcrumb';
-import { LoadingComponent } from '../loading/loading.component';
+import { ContentDialogComponent } from '../content-dialog/content-dialog.component';
 import { KnowledgeBaseArticleRequest, KnowledgeBaseArticleResponse } from '../../models/knowledge-base-article.interface';
 
 /**
@@ -30,13 +30,22 @@ import { KnowledgeBaseArticleRequest, KnowledgeBaseArticleResponse } from '../..
     InputTextModule,
     DialogModule,
     StepperModule,
+    SelectModule,
     BreadcrumbComponent,
-    LoadingComponent
+    ContentDialogComponent
   ],
   templateUrl: './knowledge-base.html',
-  styleUrl: './knowledge-base.css'
+  styleUrl: './knowledge-base.css',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class KnowledgeBaseComponent {
+  /** Opções de tipo de artigo para o dropdown. */
+  articleTypeOptions = [
+    { label: 'Conceitual', value: 'conceitual' },
+    { label: 'Operacional', value: 'operacional' },
+    { label: 'Troubleshooting', value: 'troubleshooting' }
+  ];
+
   /** Tipo do artigo selecionado. */
   articleType: 'conceitual' | 'operacional' | 'troubleshooting' | null = null;
 
@@ -67,13 +76,31 @@ export class KnowledgeBaseComponent {
   /** Controla a visibilidade do dialog de resultados (artigos gerados). */
   showResultsDialog = false;
 
+  /** Controla a visibilidade do dialog de conteúdo do artigo. */
+  showContentDialog = false;
+
+  /** Título do dialog de conteúdo. */
+  contentDialogTitle = '';
+
+  /** Conteúdo HTML do artigo para exibir no dialog. */
+  contentDialogHtml: string | null = null;
+
+  /** Índice do artigo atual no dialog de conteúdo. */
+  contentDialogArticleIndex: number | null = null;
+
   /** Step atual do stepper (para navegação entre artigos). */
   currentStep = 1;
+
+  /** Últimos dados usados para gerar artigo (para evitar geração duplicada). */
+  private lastGeneratedData: { articleType: string | null; category: string; context: string } | null = null;
 
   /** Itens do breadcrumb. */
   breadcrumbItems: BreadcrumbItem[] = [
     { label: 'Início', route: '/' },
-    { label: 'Base de Conhecimento' }
+    { label: 'IA' },
+    { label: 'GLPI' },
+    { label: 'Base de Conhecimento' },
+    { label: 'Gerador de Artigos' }
   ];
 
   constructor(
@@ -82,6 +109,27 @@ export class KnowledgeBaseComponent {
     private cdr: ChangeDetectorRef,
     private sanitizer: DomSanitizer
   ) {}
+
+  /**
+   * Verifica se os dados do formulário mudaram desde a última geração.
+   */
+  hasDataChanged(): boolean {
+    if (!this.lastGeneratedData) {
+      return true; // Se nunca gerou, considera como mudado
+    }
+
+    const currentData = {
+      articleType: this.articleType,
+      category: this.category.trim(),
+      context: this.context.trim()
+    };
+
+    return (
+      currentData.articleType !== this.lastGeneratedData.articleType ||
+      currentData.category !== this.lastGeneratedData.category ||
+      currentData.context !== this.lastGeneratedData.context
+    );
+  }
 
   /**
    * Gera artigo de Base de Conhecimento.
@@ -105,9 +153,16 @@ export class KnowledgeBaseComponent {
       return;
     }
 
+    // Verifica se os dados mudaram
+    if (!this.hasDataChanged()) {
+      this.notificationService.showWarning('Os dados não foram alterados. Modifique o tipo, categoria ou contexto antes de gerar novamente.', 'Atenção');
+      return;
+    }
+
     this.loading = true;
     this.error = null;
     this.articleResult = null;
+    this.cdr.markForCheck();
 
     const request: KnowledgeBaseArticleRequest = {
       article_type: this.articleType,
@@ -117,6 +172,13 @@ export class KnowledgeBaseComponent {
 
     this.apiService.generateKnowledgeBaseArticle(request).subscribe({
       next: (response) => {
+        // Salva os dados usados para comparação futura
+        this.lastGeneratedData = {
+          articleType: this.articleType,
+          category: categoryTrimmed,
+          context: contextTrimmed
+        };
+
         this.articleResult = response;
         this.currentStep = 1; // Reseta para o primeiro artigo
         this.loading = false;
@@ -150,6 +212,14 @@ export class KnowledgeBaseComponent {
     this.error = null;
     this.currentStep = 1;
     this.showResultsDialog = false;
+    this.lastGeneratedData = null; // Limpa também os dados da última geração
+  }
+
+  /**
+   * Abre o dialog de resultados.
+   */
+  openResultsDialog(): void {
+    this.showResultsDialog = true;
   }
 
   /**
@@ -177,8 +247,8 @@ export class KnowledgeBaseComponent {
       return;
     }
 
-    // Converte Markdown para HTML
-    let htmlContent = markdownToHtml(currentArticle.content);
+    // Usa HTML já convertido pelo backend
+    let htmlContent = currentArticle.content_html || '';
     
     // Converte classes CSS para estilos inline (necessário para o GLPI)
     // Highlight: class="highlight" → style="color: #000000; background-color: #f1c40f;"
@@ -210,7 +280,8 @@ export class KnowledgeBaseComponent {
     }
 
     const allArticlesHtml = this.articleResult.articles.map(article => {
-      let htmlContent = markdownToHtml(article.content);
+      // Usa HTML já convertido pelo backend
+      let htmlContent = article.content_html || '';
       htmlContent = htmlContent.replace(
         /<span class="highlight">/g,
         '<span style="color: #000000; background-color: #f1c40f;">'
@@ -259,17 +330,19 @@ export class KnowledgeBaseComponent {
   }
 
   /**
-   * Converte o artigo atual (do step selecionado) Markdown para HTML seguro.
+   * Obtém o HTML do artigo atual (do step selecionado).
    * 
    * @returns HTML sanitizado do artigo atual
    */
   getArticleHtml(): SafeHtml {
-    const content = this.getCurrentArticle();
-    if (!content) {
+    if (!this.articleResult?.articles || this.articleResult.articles.length === 0) {
       return '';
     }
-    const html = markdownToHtml(content);
-    return this.sanitizer.bypassSecurityTrustHtml(html);
+    const currentArticle = this.articleResult.articles[this.currentStep - 1];
+    if (!currentArticle?.content_html) {
+      return '';
+    }
+    return this.sanitizer.bypassSecurityTrustHtml(currentArticle.content_html);
   }
 
   /**
@@ -312,9 +385,11 @@ export class KnowledgeBaseComponent {
     if (!this.articleResult?.articles || index < 0 || index >= this.articleResult.articles.length) {
       return '';
     }
-    const content = this.articleResult.articles[index].content;
-    const html = markdownToHtml(content);
-    return this.sanitizer.bypassSecurityTrustHtml(html);
+    const article = this.articleResult.articles[index];
+    if (!article?.content_html) {
+      return '';
+    }
+    return this.sanitizer.bypassSecurityTrustHtml(article.content_html);
   }
 
   /**
@@ -357,6 +432,42 @@ export class KnowledgeBaseComponent {
    */
   closeContextHelpDialog(): void {
     this.showContextHelpDialog = false;
+  }
+
+  /**
+   * Abre o dialog de conteúdo do artigo.
+   * 
+   * @param title - Título do artigo
+   * @param articleIndex - Índice do artigo (0-based)
+   */
+  openContentDialog(title: string, articleIndex: number): void {
+    if (!this.articleResult?.articles || articleIndex < 0 || articleIndex >= this.articleResult.articles.length) {
+      return;
+    }
+    const article = this.articleResult.articles[articleIndex];
+    this.contentDialogTitle = title;
+    // Usa HTML já convertido pelo backend
+    this.contentDialogHtml = article.content_html || '';
+    this.contentDialogArticleIndex = articleIndex;
+    this.showContentDialog = true;
+  }
+
+  /**
+   * Copia o artigo do dialog de conteúdo.
+   */
+  copyArticleFromDialog(): void {
+    if (this.contentDialogArticleIndex !== null) {
+      this.copyArticle(this.contentDialogArticleIndex);
+    }
+  }
+
+  /**
+   * Fecha o dialog de conteúdo do artigo.
+   */
+  closeContentDialog(): void {
+    this.showContentDialog = false;
+    this.contentDialogHtml = null;
+    this.contentDialogArticleIndex = null;
   }
 }
 

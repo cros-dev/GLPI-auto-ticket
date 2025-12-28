@@ -1,9 +1,10 @@
 """
-Utilitários para processamento de conteúdo HTML.
+Utilitários para processamento de conteúdo HTML e Markdown.
 
 Este módulo contém funções auxiliares para limpeza e formatação de conteúdo.
 """
 import re
+import markdown
 from django.utils.html import strip_tags
 
 
@@ -41,4 +42,55 @@ def clean_html_content(html_content):
     text = text.strip()
     
     return text
+
+
+def markdown_to_html(markdown_content: str) -> str:
+    """
+    Converte Markdown para HTML com extensões customizadas.
+    
+    Suporta:
+    - Markdown padrão (negrito, itálico, listas, títulos, etc.)
+    - Extensão customizada: ==texto== → <span class="highlight">texto</span>
+    - Extensão customizada: [Inserir print da tela ...] → <span class="print-instruction">...</span>
+    
+    Args:
+        markdown_content: Texto em Markdown
+        
+    Returns:
+        str: HTML convertido com extensões customizadas aplicadas
+    """
+    if not markdown_content:
+        return ""
+    
+    # Usa placeholders temporários únicos que não são interpretados pelo Markdown
+    # Usa caracteres especiais que não são processados pelo markdown
+    import uuid
+    placeholders = {}
+    
+    # Protege ==texto== (highlight) antes da conversão Markdown
+    def highlight_replacer(match):
+        placeholder = f"<!--HIGHLIGHT_{uuid.uuid4().hex[:12]}-->"
+        placeholders[placeholder] = f'<span class="highlight">{match.group(1)}</span>'
+        return placeholder
+    
+    # Protege [Inserir print da tela ...] antes da conversão Markdown
+    def print_replacer(match):
+        placeholder = f"<!--PRINT_{uuid.uuid4().hex[:12]}-->"
+        placeholders[placeholder] = f'<span class="print-instruction">Inserir print da tela {match.group(1)}</span>'
+        return placeholder
+    
+    # Substitui extensões customizadas por placeholders
+    protected_content = re.sub(r'==([^=]+)==', highlight_replacer, markdown_content)
+    protected_content = re.sub(r'\[Inserir print da tela ([^\]]+)\]', print_replacer, protected_content)
+    
+    # Converte Markdown padrão para HTML
+    md = markdown.Markdown(extensions=['extra', 'nl2br'])
+    html = md.convert(protected_content)
+    
+    # Restaura extensões customizadas dos placeholders
+    # Os comentários HTML são preservados pelo markdown, então podemos substituí-los
+    for placeholder, replacement in placeholders.items():
+        html = html.replace(placeholder, replacement)
+    
+    return html
 

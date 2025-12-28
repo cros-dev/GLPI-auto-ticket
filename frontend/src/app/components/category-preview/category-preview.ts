@@ -1,4 +1,4 @@
-import { Component, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
@@ -27,7 +27,8 @@ import { LoadingComponent } from '../loading/loading.component';
     LoadingComponent
   ],
   templateUrl: './category-preview.html',
-  styleUrl: './category-preview.css'
+  styleUrl: './category-preview.css',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CategoryPreviewComponent {
   /** Título do ticket sendo testado. */
@@ -56,7 +57,9 @@ export class CategoryPreviewComponent {
   /** Itens do breadcrumb. */
   breadcrumbItems: BreadcrumbItem[] = [
     { label: 'Início', route: '/' },
-    { label: 'Preview de Categoria' }
+    { label: 'IA' },
+    { label: 'GLPI' },
+    { label: 'Classificar Categoria' }
   ];
 
   constructor(
@@ -80,6 +83,7 @@ export class CategoryPreviewComponent {
     this.loading = true;
     this.error = null;
     this.previewResult = null;
+    this.cdr.markForCheck();
 
     this.apiService.previewCategorySuggestion(titleTrimmed, contentTrimmed).subscribe({
       next: (result) => {

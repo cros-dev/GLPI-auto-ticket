@@ -173,19 +173,26 @@ IMAGE_RULES = """IMAGENS:
 
 # ==================== INSTRUÇÕES FINAIS ====================
 
-FINAL_INSTRUCTIONS = """INSTRUÇÕES FINAIS:
+def get_final_instructions(article_type: str, category: str) -> str:
+    """Retorna as instruções finais formatadas com o tipo e categoria."""
+    return f"""INSTRUÇÕES FINAIS:
 
 - Analise o contexto fornecido
-- Identifique todos os softwares/sistemas mencionados
-- Gere:
-  * UM artigo CONCEITUAL UNITÁRIO para cada software/sistema identificado
-  * UM artigo OPERACIONAL separado se houver procedimentos descritos
-- Ordem de geração:
-  1. Artigos conceituais
-  2. Artigo operacional (se existir)
-- Categoria:
-  * Artigos conceituais: {category} > [Nome do Sistema]
-  * Artigos operacionais: usar a categoria base ({category})
+- Gere APENAS o tipo de artigo solicitado ({article_type})
+- Se o tipo for "conceitual":
+  * Identifique todos os softwares/sistemas mencionados
+  * Gere UM artigo CONCEITUAL UNITÁRIO para cada software/sistema identificado
+  * Categoria: {category} > [Nome do Sistema]
+- Se o tipo for "operacional":
+  * Identifique procedimentos específicos mencionados no contexto
+  * Gere UM artigo OPERACIONAL para cada procedimento identificado
+  * Categoria: usar a categoria base ({category})
+  * Foque em passos numerados e instruções práticas
+  * Se o contexto mencionar prints ou telas específicas, inclua instruções para inserir prints
+- Se o tipo for "troubleshooting":
+  * Identifique problemas ou situações de diagnóstico mencionadas
+  * Gere UM artigo TROUBLESHOOTING para cada problema identificado
+  * Categoria: usar a categoria base ({category})
 - Separar cada artigo com DUAS linhas em branco
 - NÃO adicionar introduções ou explicações fora dos artigos
 - NÃO adicionar metadados
@@ -220,10 +227,18 @@ def get_knowledge_base_prompt(
 CATEGORIA BASE:
 {category}
 
-TIPO DE ARTIGO SOLICITADO (preferência):
+TIPO DE ARTIGO SOLICITADO:
 {article_type}
 
-NOTA: O tipo acima é uma preferência. Se o contexto contiver informações que requerem múltiplos tipos de artigo (conceitual + operacional), gere todos os artigos necessários.
+REGRAS CRÍTICAS POR TIPO:
+
+- Se o tipo for "conceitual": Gere APENAS artigos conceituais. Foque em explicar O QUE É, PARA QUE SERVE e ONDE É EXECUTADO. NÃO inclua passos ou procedimentos.
+
+- Se o tipo for "operacional": Gere APENAS artigos operacionais com procedimentos passo a passo. Foque em COMO FAZER. NÃO inclua explicações conceituais extensas. Se o contexto mencionar procedimentos específicos (como configurações, passos, prints), documente-os detalhadamente.
+
+- Se o tipo for "troubleshooting": Gere APENAS artigos de troubleshooting. Foque em problemas, sintomas, causas e soluções. NÃO inclua explicações conceituais ou procedimentos operacionais gerais.
+
+IMPORTANTE: Respeite rigorosamente o tipo solicitado. NÃO gere múltiplos tipos de artigo. Gere APENAS o tipo solicitado.
 
 CONTEXTO DO AMBIENTE:
 {context}
@@ -240,5 +255,5 @@ ESTRUTURAS OBRIGATÓRIAS:
 
 {IMAGE_RULES}
 
-{FINAL_INSTRUCTIONS}
+{get_final_instructions(article_type, category)}
 """

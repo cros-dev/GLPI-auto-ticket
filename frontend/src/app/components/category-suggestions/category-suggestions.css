@@ -1,21 +1,32 @@
-.container {
-  max-width: 1200px;
-  margin: 0;
-}
-
-.header {
-  margin-bottom: var(--spacing-lg);
-}
-
-h1 {
-  margin: 0;
-  color: var(--text-color);
-}
+/* Nota: Estilos globais foram movidos para styles/typography.css */
 
 .suggestions-list {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
+}
+
+.suggestion-card {
+  position: relative;
+  transition: box-shadow var(--transition);
+  border-left: 4px solid var(--border-color-subtle);
+}
+
+.suggestion-card:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+/* Bordas laterais coloridas por status */
+.suggestion-card[class*="status-pending"] {
+  border-left-color: #f59e0b; /* Amber */
+}
+
+.suggestion-card[class*="status-approved"] {
+  border-left-color: #10b981; /* Green */
+}
+
+.suggestion-card[class*="status-rejected"] {
+  border-left-color: #ef4444; /* Red */
 }
 
 .suggestion-header {
@@ -25,6 +36,7 @@ h1 {
   margin-bottom: var(--spacing-md);
   padding-bottom: var(--spacing-md);
   border-bottom: 1px solid var(--border-color-subtle);
+  gap: var(--spacing-md);
 }
 
 .header-left {
@@ -32,63 +44,123 @@ h1 {
   align-items: center;
   gap: var(--spacing-md);
   flex: 1;
-}
-
-.suggestion-header h2 {
-  margin: 0;
-  color: var(--text-color);
-  font-size: 1.25rem;
-  flex: 1;
+  min-width: 0; /* Permite truncamento */
 }
 
 .badge-id {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background-color: var(--primary-color);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--border-radius-sm);
+  background: linear-gradient(135deg, var(--primary-color) 0%, color-mix(in srgb, var(--primary-color) 80%, transparent) 100%);
   color: var(--app-surface-card);
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
   flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.suggestion-header h2 {
+  margin: 0;
+  color: var(--text-color);
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  flex: 1;
+  line-height: 1.5;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: calc(1.5em * 2); /* 2 linhas */
 }
 
 .badge {
-  padding: var(--spacing-xs) 0.75rem;
-  border-radius: 12px;
-  font-size: 0.875rem;
-  font-weight: 500;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
 }
 
 .badge.pending {
-  background-color: var(--bg-disabled);
-  color: var(--text-color);
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.badge.pending::before {
+  background-color: #f59e0b;
 }
 
 .badge.approved {
-  background-color: var(--highlight-bg);
-  color: var(--highlight-text);
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.badge.approved::before {
+  background-color: #10b981;
 }
 
 .badge.rejected {
-  background-color: var(--bg-disabled);
-  color: var(--text-color);
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.badge.rejected::before {
+  background-color: #ef4444;
+}
+
+.suggestion-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
 }
 
 .ticket-info {
-  margin-bottom: var(--spacing-md);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background-color: var(--bg-color);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color-subtle);
 }
 
 .ticket-info p {
-  margin: var(--spacing-sm) 0;
+  margin: 0;
   color: var(--text-color-secondary);
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
 .ticket-info strong {
   color: var(--text-color);
+  font-weight: 600;
+  min-width: fit-content;
 }
 
 .ticket-content {
@@ -101,27 +173,16 @@ h1 {
 .ticket-content-clickable {
   position: relative;
   cursor: pointer;
-  transition: box-shadow var(--transition), outline-color var(--transition);
+  transition: box-shadow var(--transition), border-color var(--transition);
+  border: 1px solid transparent;
 }
 
 .ticket-content-clickable:hover {
   box-shadow: var(--shadow-sm);
+  border-color: var(--primary-color);
 }
 
-.content-expand-icon {
-  position: absolute;
-  top: var(--spacing-md);
-  right: var(--spacing-md);
-  color: var(--text-color-secondary);
-  font-size: 0.9rem;
-  opacity: 0.85;
-  pointer-events: none; /* mantém o card inteiro clicável */
-}
-
-.ticket-content-clickable:hover .content-expand-icon {
-  color: var(--primary-color);
-  opacity: 1;
-}
+/* Nota: .content-expand-icon foi movido para styles/components.css */
 
 .ticket-content p {
   margin: var(--spacing-sm) 0;
@@ -131,28 +192,49 @@ h1 {
   white-space: pre-wrap;
   word-wrap: break-word;
   color: var(--text-color-tertiary);
-  font-size: 0.9rem;
+  font-size: var(--font-size-label);
   line-height: 1.5;
 }
 
-.content-preview {
-  /* Preview consistente (mantém modal com conteúdo completo) */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 6;
-  line-clamp: 6;
-  overflow: hidden;
-}
+/* Nota: .content-preview foi movido para styles/components.css */
 
 /* Removido: dica "... (clique para ver mais)".
    Agora o card inteiro do conteúdo é clicável e abre o modal. */
 
 .suggestion-actions {
   display: flex;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   margin-top: var(--spacing-lg);
   padding-top: var(--spacing-md);
   border-top: 1px solid var(--border-color-subtle);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .suggestion-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-left {
+    width: 100%;
+  }
+
+  .badge {
+    align-self: flex-start;
+  }
+
+  .ticket-info {
+    grid-template-columns: 1fr;
+  }
+
+  .suggestion-actions {
+    flex-direction: column;
+  }
+
+  .suggestion-actions p-button {
+    width: 100%;
+  }
 }
 
 .edit-dialog-content {
@@ -161,42 +243,28 @@ h1 {
   gap: var(--spacing-lg);
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.form-group label {
-  font-weight: 600;
-  color: var(--text-color);
-  font-size: 0.9rem;
-}
-
-.form-group label .required {
-  color: var(--error-color);
-}
-
-.form-hint {
-  color: var(--text-color-secondary);
-  font-size: 0.85rem;
-  margin-top: var(--spacing-xs);
-}
+/* Nota: Estilos de formulário foram movidos para styles/forms.css */
 
 .form-info {
-  margin-top: var(--spacing-md);
   padding: var(--spacing-md);
   background-color: var(--bg-color);
   border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color-subtle);
 }
 
 .form-info p {
   margin: var(--spacing-xs) 0;
   color: var(--text-color-secondary);
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.form-info p:last-child {
+  margin-bottom: 0;
 }
 
 .form-info strong {
   color: var(--text-color);
+  font-weight: 600;
 }
 

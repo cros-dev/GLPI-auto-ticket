@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -42,6 +42,7 @@ import { ContentDialogComponent } from '../content-dialog/content-dialog.compone
   ],
   templateUrl: './category-suggestions.html',
   styleUrl: './category-suggestions.css',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CategorySuggestions implements OnInit, OnDestroy {
   /** Lista de sugestões de categorias carregadas. */
@@ -119,6 +120,7 @@ export class CategorySuggestions implements OnInit, OnDestroy {
     return [
       { label: 'Início', route: '/' },
       { label: 'Sugestões de Categorias', route: '/category-suggestions' },
+      { label: 'GLPI' },
       { label: this.breadcrumbLabel }
     ];
   }
@@ -201,6 +203,7 @@ export class CategorySuggestions implements OnInit, OnDestroy {
 
     this.loading = true;
     this.error = null;
+    this.cdr.markForCheck();
 
     this.apiService.getCategorySuggestions(this.currentStatus).pipe(
       takeUntil(this.destroy$)

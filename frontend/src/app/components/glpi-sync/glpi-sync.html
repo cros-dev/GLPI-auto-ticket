@@ -1,18 +1,20 @@
-<section class="container">
-  <header class="header">
-    <h2>Sincronização</h2>
+<div class="container">
+  <app-breadcrumb [items]="breadcrumbItems"></app-breadcrumb>
+  
+  <div class="header">
+    <h1>Sincronizar Categorias</h1>
     <p class="subtitle">Atualize o espelho local de categorias do GLPI.</p>
-  </header>
+  </div>
 
-  <div class="card">
+  <div class="card form-card">
     <div class="actions">
       <button
         pButton
         type="button"
-        label="Sincronizar agora"
+        [label]="loading ? 'Sincronizando...' : 'Sincronizar agora'"
         icon="pi pi-refresh"
-        [loading]="syncing"
-        [disabled]="syncing"
+        [loading]="loading"
+        [disabled]="loading"
         (click)="sync()"
       ></button>
     </div>
@@ -26,6 +28,6 @@
       </div>
     }
   </div>
-</section>
+</div>
 
 

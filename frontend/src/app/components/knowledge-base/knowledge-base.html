@@ -2,7 +2,7 @@
   <app-breadcrumb [items]="breadcrumbItems"></app-breadcrumb>
   
   <div class="header">
-    <h1>Base de Conhecimento</h1>
+    <h1>Gerador de Artigos</h1>
     <p class="subtitle">Gere artigos de Base de Conhecimento usando Google Gemini AI para documentação técnica.</p>
   </div>
 
@@ -11,7 +11,7 @@
     
     <div class="form-group">
       <label for="article-type">
-        Tipo do Artigo <span class="required">*</span>
+        Tipo do Artigo
         <button
           type="button"
           class="help-icon-button"
@@ -20,21 +20,22 @@
           <i class="pi pi-question-circle"></i>
         </button>
       </label>
-      <select
+      <p-select
         id="article-type"
         [(ngModel)]="articleType"
+        [options]="articleTypeOptions"
+        optionLabel="label"
+        optionValue="value"
         [disabled]="loading"
-        class="p-inputtext p-component w-full">
-        <option [value]="null" disabled>Selecione o tipo do artigo</option>
-        <option value="conceitual">Conceitual</option>
-        <option value="operacional">Operacional</option>
-        <option value="troubleshooting">Troubleshooting</option>
-      </select>
+        placeholder="Selecione o tipo do artigo"
+        [showClear]="true"
+        styleClass="w-full">
+      </p-select>
     </div>
 
     <div class="form-group">
       <label for="category">
-        Categoria <span class="required">*</span>
+        Categoria
         <button
           type="button"
           class="help-icon-button"
@@ -55,7 +56,7 @@
 
     <div class="form-group">
       <label for="context">
-        Contexto <span class="required">*</span>
+        Contexto
         <button
           type="button"
           class="help-icon-button"
@@ -68,40 +69,47 @@
         id="context"
         [(ngModel)]="context"
         [disabled]="loading"
-        [rows]="8"
+        [rows]="4"
         placeholder="Descreva o ambiente, sistemas, servidores, softwares envolvidos, configurações, etc..."
         class="p-inputtextarea p-inputtext p-component w-full"></textarea>
     </div>
 
+    @if (!loading && error) {
+      <div class="error-message-inline">
+        <i class="pi pi-exclamation-triangle"></i>
+        <span>{{ error }}</span>
+      </div>
+    }
+
     <div class="form-actions">
+      <div class="form-buttons">
       <p-button
-        label="Gerar Artigo"
+          [label]="loading ? 'Gerando Artigo...' : 'Gerar Artigo'"
         icon="pi pi-file-edit"
         severity="primary"
         [loading]="loading"
-        [disabled]="loading || !articleType || !category.trim() || !context.trim()"
+          [disabled]="loading || !articleType || !category.trim() || !context.trim() || !hasDataChanged()"
         (onClick)="generateArticle()">
       </p-button>
+        @if (articleResult && !showResultsDialog) {
+          <p-button
+            label="Ver Artigos"
+            icon="pi pi-eye"
+            severity="success"
+            [disabled]="loading"
+            (onClick)="openResultsDialog()">
+          </p-button>
+        }
       <p-button
         label="Limpar"
-        icon="pi pi-times"
+          icon="pi pi-trash"
         severity="secondary"
         [disabled]="loading"
         (onClick)="clear()">
       </p-button>
     </div>
-  </div>
-
-  <app-loading [loading]="loading" message="Gerando artigo de Base de Conhecimento..."></app-loading>
-
-  @if (!loading && error) {
-    <div class="card error-card">
-      <div class="error-message">
-        <i class="pi pi-exclamation-triangle"></i>
-        <p>{{ error }}</p>
       </div>
     </div>
-  }
 
   <!-- Dialog de resultados (artigos gerados) -->
   @if (articleResult) {
@@ -115,6 +123,7 @@
       (onHide)="closeResultsDialog()">
       <div class="result-dialog-content">
         <div class="result-meta">
+          <div class="meta-info">
           <span class="meta-item">
             <strong>Tipo:</strong> {{ translateArticleType(articleResult.article_type) }}
           </span>
@@ -125,32 +134,29 @@
             <strong>Total:</strong> {{ articleResult.articles.length }} artigo(s)
           </span>
         </div>
-        
         @if (articleResult.articles.length > 1) {
-          <div class="result-actions">
+            <div class="meta-actions">
             <p-button
               label="Copiar Todos"
               icon="pi pi-copy"
               severity="secondary"
               (onClick)="copyAllArticles()"
-              title="Copia todos os artigos em formato HTML">
+                title="Copia todos os artigos em formato HTML para colar no GLPI">
             </p-button>
           </div>
         }
+        </div>
 
         @if (articleResult.articles.length === 1) {
           <!-- Se houver apenas um artigo, exibe diretamente sem stepper -->
-          <div class="result-actions">
-            <p-button
-              label="Copiar HTML"
-              icon="pi pi-copy"
-              severity="secondary"
-              (onClick)="copyArticle()"
-              title="Copia o artigo em formato HTML para colar no GLPI">
-            </p-button>
-          </div>
           <div class="result-content">
-            <div class="article-text" [innerHTML]="getArticleHtml()"></div>
+            <div
+              class="article-content article-content-clickable"
+              (click)="openContentDialog(getArticles()[0]?.title || 'Artigo', 0)"
+              title="Clique para ver o conteúdo completo">
+              <i class="pi pi-window-maximize content-expand-icon" aria-hidden="true"></i>
+              <div class="article-text article-preview" [innerHTML]="getArticleHtml()"></div>
+            </div>
           </div>
         } @else {
           <!-- Stepper para múltiplos artigos -->
@@ -165,18 +171,16 @@
                 <p-step-panel [value]="$index + 1">
                   <ng-template #content let-activateCallback="activateCallback">
                     <div class="step-content">
-                      <div class="step-actions">
-                        <p-button
-                          label="Copiar HTML"
-                          icon="pi pi-copy"
-                          severity="secondary"
-                          (onClick)="copyArticle($index)"
-                          title="Copia este artigo em formato HTML para colar no GLPI">
-                        </p-button>
+                      <div
+                        class="article-content article-content-clickable"
+                        (click)="openContentDialog(article.title, $index)"
+                        title="Clique para ver o conteúdo completo">
+                        <i class="pi pi-window-maximize content-expand-icon" aria-hidden="true"></i>
+                        <div class="article-text article-preview" [innerHTML]="getArticleHtmlByIndex($index)"></div>
                       </div>
-                      <div class="article-text" [innerHTML]="getArticleHtmlByIndex($index)"></div>
                     </div>
                     <div class="step-navigation">
+                      <div class="step-navigation-left">
                       @if ($index > 0) {
                         <p-button
                           label="Anterior"
@@ -185,14 +189,18 @@
                           (onClick)="currentStep = $index; activateCallback($index)">
                         </p-button>
                       }
+                      </div>
+                      <div class="step-navigation-right">
                       @if ($index < getArticles().length - 1) {
                         <p-button
                           label="Próximo"
                           icon="pi pi-arrow-right"
                           iconPos="right"
+                            severity="success"
                           (onClick)="currentStep = $index + 2; activateCallback($index + 2)">
                         </p-button>
                       }
+                      </div>
                     </div>
                   </ng-template>
                 </p-step-panel>
@@ -290,5 +298,14 @@
       </div>
     </div>
   </p-dialog>
+
+  <!-- Dialog para exibir conteúdo completo do artigo -->
+  <app-content-dialog
+    [(visible)]="showContentDialog"
+    [title]="contentDialogTitle"
+    [content]="contentDialogHtml"
+    [showCopyButton]="true"
+    (copyClick)="copyArticleFromDialog()">
+  </app-content-dialog>
 </div>
 

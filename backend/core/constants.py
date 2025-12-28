@@ -28,3 +28,22 @@ GENERIC_CATEGORIES = [
 # Tipos válidos de artigos de Base de Conhecimento
 VALID_ARTICLE_TYPES = ['conceitual', 'operacional', 'troubleshooting']
 
+# Choices para tipos de artigos de Base de Conhecimento
+ARTICLE_TYPE_CHOICES = [
+    ('conceitual', 'Conceitual'),
+    ('operacional', 'Operacional'),
+    ('troubleshooting', 'Troubleshooting'),
+]
+
+# Choices para origem de sugestões/artigos
+SUGGESTION_SOURCE_CHOICES = [
+    ('ticket', 'Ticket Real'),
+    ('preview', 'Preview Manual'),
+]
+
+# Choices para origem de artigos de Base de Conhecimento
+# Por enquanto apenas 'preview', mas pode ser expandido no futuro
+KNOWLEDGE_BASE_ARTICLE_SOURCE_CHOICES = [
+    ('preview', 'Preview Manual'),
+]
+

@@ -1,0 +1,118 @@
+/* =========================================================
+ * GLOBAL COMPONENT CLASSES
+ * Classes reutilizáveis para componentes comuns
+ * ========================================================= */
+
+/* Estados comuns (empty, error) */
+.empty {
+  padding: var(--spacing-xl);
+  color: var(--text-color-secondary);
+  text-align: left;
+}
+
+.error {
+  padding: var(--spacing-lg);
+  color: var(--text-color);
+  background-color: var(--app-surface-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+/* Cards */
+.card {
+  background: var(--app-surface-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Mensagens de erro */
+.error-message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  color: var(--error-color);
+}
+
+.error-message i {
+  font-size: var(--font-size-lg);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.error-message p {
+  margin: 0;
+  flex: 1;
+}
+
+.error-message-inline {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  background-color: rgba(244, 67, 54, 0.08);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-left: 4px solid var(--error-color);
+  border-radius: var(--border-radius-sm);
+  color: var(--error-color);
+  font-size: var(--font-size-label);
+  line-height: 1.5;
+}
+
+.error-message-inline i {
+  font-size: var(--font-size-md);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.error-message-inline span {
+  flex: 1;
+}
+
+/* Ícone de expansão de conteúdo */
+.content-expand-icon {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  color: var(--text-color-secondary);
+  font-size: var(--font-size-label);
+  opacity: 0.85;
+  pointer-events: none; /* mantém o card inteiro clicável */
+  z-index: 1;
+}
+
+/* Preview de conteúdo truncado */
+.content-preview,
+.article-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  overflow: hidden;
+  max-height: none;
+}
+
+/* Conteúdo clicável para expansão */
+.content-clickable,
+.article-content-clickable,
+.ticket-content-clickable {
+  cursor: pointer;
+  transition: box-shadow var(--transition), outline-color var(--transition);
+}
+
+.content-clickable:hover,
+.article-content-clickable:hover,
+.ticket-content-clickable:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.content-clickable:hover .content-expand-icon,
+.article-content-clickable:hover .content-expand-icon,
+.ticket-content-clickable:hover .content-expand-icon {
+  color: var(--primary-color);
+  opacity: 1;
+}
+

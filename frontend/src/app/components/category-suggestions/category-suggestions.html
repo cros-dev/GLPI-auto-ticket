@@ -8,6 +8,15 @@
     
     <div class="header">
       <h1>{{ pageTitle }}</h1>
+      @if (currentStatus === 'pending') {
+        <p class="subtitle">Revise e aprove ou rejeite sugestões de categorias geradas automaticamente a partir dos tickets do GLPI.</p>
+      }
+      @if (currentStatus === 'approved') {
+        <p class="subtitle">Visualize as sugestões de categorias que foram aprovadas e já estão disponíveis no sistema.</p>
+      }
+      @if (currentStatus === 'rejected') {
+        <p class="subtitle">Visualize as sugestões de categorias que foram rejeitadas.</p>
+      }
     </div>
 
     <app-loading [loading]="loading" message="Carregando sugestões..."></app-loading>
@@ -39,11 +48,11 @@
       <!-- Lista de Sugestões -->
       <div class="suggestions-list">
         @for (suggestion of suggestions; track suggestion.id) {
-          <div class="card suggestion-card">
+          <div class="card suggestion-card" [ngClass]="'status-' + suggestion.status">
             <div class="suggestion-header">
               <div class="header-left">
                 <div class="badge-id">{{ suggestion.id }}</div>
-                <h2>{{ suggestion.suggested_path }}</h2>
+                <h2 [title]="suggestion.suggested_path">{{ suggestion.suggested_path }}</h2>
               </div>
               <div class="badge" 
                    [class.pending]="suggestion.status === 'pending'"

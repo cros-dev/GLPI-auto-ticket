@@ -56,34 +56,53 @@ export class SidenavComponent implements OnInit, OnDestroy {
       {
         label: 'Sugestões de Categorias',
         icon: 'pi pi-tags',
-        routerLink: ['/category-suggestions']
-      },
-      {
-        label: 'Pendentes',
-        icon: 'pi pi-clock',
         routerLink: ['/category-suggestions'],
-        queryParams: { status: 'pending' }
+        items: [
+          {
+            label: 'Dashboard',
+            icon: 'pi pi-th-large',
+            routerLink: ['/category-suggestions']
+          },
+          {
+            label: 'Pendentes',
+            icon: 'pi pi-clock',
+            routerLink: ['/category-suggestions'],
+            queryParams: { status: 'pending' }
+          },
+          {
+            label: 'Aprovadas',
+            icon: 'pi pi-check-circle',
+            routerLink: ['/category-suggestions'],
+            queryParams: { status: 'approved' }
+          }
+        ]
       },
       {
-        label: 'Aprovadas',
-        icon: 'pi pi-check-circle',
-        routerLink: ['/category-suggestions'],
-        queryParams: { status: 'approved' }
+        label: 'IA',
+        icon: 'pi pi-sparkles',
+        items: [
+          {
+            label: 'Classificar Categoria',
+            icon: 'pi pi-search',
+            routerLink: ['/category-preview']
+          },
+          {
+            label: 'Gerador de Artigos',
+            icon: 'pi pi-book',
+            routerLink: ['/knowledge-base']
+          }
+        ]
       },
       {
-        label: 'Preview de Categoria',
-        icon: 'pi pi-search',
-        routerLink: ['/category-preview']
-      },
-      {
-        label: 'Sincronização',
-        icon: 'pi pi-refresh',
-        routerLink: ['/sync']
-      },
-      {
-        label: 'Base de Conhecimento',
-        icon: 'pi pi-book',
-        routerLink: ['/knowledge-base']
+        label: 'Integração',
+        icon: 'pi pi-link',
+        items: [
+          {
+            label: 'Sincronizar Categorias',
+            icon: 'pi pi-refresh',
+            routerLink: ['/sync']
+          }
+        ]
       }
     ];
   }

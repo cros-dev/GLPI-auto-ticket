@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import mark_safe
 from django.utils import timezone
-from .models import GlpiCategory, Ticket, CategorySuggestion, SatisfactionSurvey
+from .models import GlpiCategory, Ticket, CategorySuggestion, SatisfactionSurvey, KnowledgeBaseArticle
 from .services import get_category_path
 
 class Level1Filter(admin.SimpleListFilter):
@@ -303,8 +303,8 @@ class CategorySuggestionAdmin(admin.ModelAdmin):
     Exibe sugestões geradas pela IA quando não encontra categoria exata,
     permitindo revisão e aprovação manual.
     """
-    list_display = ('id', 'suggested_path', 'ticket_link', 'status', 'created_at', 'reviewed_at')
-    list_filter = ('status', 'created_at', 'reviewed_at')
+    list_display = ('id', 'suggested_path', 'ticket_link', 'source', 'status', 'created_at', 'reviewed_at')
+    list_filter = ('status', 'source', 'created_at', 'reviewed_at')
     search_fields = ('suggested_path', 'ticket_title', 'ticket__id')
     readonly_fields = (
         'ticket',
@@ -353,9 +353,13 @@ class CategorySuggestionAdmin(admin.ModelAdmin):
             obj: Instância de CategorySuggestion
             
         Returns:
-            str: Link HTML para o ticket ou '-' se não houver
+            str: Link HTML para o ticket, 'Preview' se for preview, ou '-' se não houver
         """
-        return mark_safe(f'<a href="/admin/core/ticket/{obj.ticket.id}/change/">Ticket #{obj.ticket.id}</a>')
+        if obj.ticket:
+            return mark_safe(f'<a href="/admin/core/ticket/{obj.ticket.id}/change/">Ticket #{obj.ticket.id}</a>')
+        elif obj.source == 'preview':
+            return 'Preview'
+        return '-'
     ticket_link.short_description = 'Ticket'
     
     def ticket_content_display(self, obj):
@@ -574,3 +578,87 @@ class SatisfactionSurveyAdmin(admin.ModelAdmin):
             f'{count} token(s) resetado(s) com sucesso. O usuário poderá responder a pesquisa novamente.'
         )
     reset_token_action.short_description = 'Resetar token (permitir nova resposta)'
+
+
+@admin.register(KnowledgeBaseArticle)
+class KnowledgeBaseArticleAdmin(admin.ModelAdmin):
+    """
+    Configuração do admin para artigos de Base de Conhecimento.
+    
+    Exibe artigos gerados pela IA, permitindo revisão e reutilização.
+    """
+    list_display = ('id', 'article_type', 'category_short', 'source', 'created_at')
+    list_filter = ('article_type', 'source', 'created_at')
+    search_fields = ('category', 'context', 'content')
+    readonly_fields = (
+        'article_type',
+        'category',
+        'context',
+        'content_display',
+        'content_html_display',
+        'content_html_raw',
+        'source',
+        'created_at',
+        'updated_at'
+    )
+    
+    fieldsets = (
+        ('Artigo', {
+            'fields': (
+                'article_type',
+                'category',
+                'source',
+            )
+        }),
+        ('Conteúdo', {
+            'fields': (
+                'context',
+                'content_display',
+                'content_html_display',
+                'content_html_raw',
+            )
+        }),
+        ('Metadados', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def category_short(self, obj):
+        """Exibe categoria truncada para a listagem."""
+        if len(obj.category) > 50:
+            return obj.category[:50] + '...'
+        return obj.category
+    category_short.short_description = 'Categoria'
+    
+    def content_display(self, obj):
+        """Exibe conteúdo Markdown formatado."""
+        if not obj.content:
+            return "-"
+        return mark_safe(
+            f'<pre style="white-space: pre-wrap; max-height: 400px; overflow-y: auto; '
+            f'padding: 1rem; border: 1px solid rgba(128, 128, 128, 0.3); '
+            f'border-radius: 4px; margin: 0; background: transparent;">{obj.content}</pre>'
+        )
+    content_display.short_description = 'Conteúdo (Markdown)'
+    
+    def content_html_display(self, obj):
+        """Exibe conteúdo HTML formatado."""
+        if not obj.content_html:
+            return "-"
+        return mark_safe(f'<div style="max-height: 400px; overflow-y: auto;">{obj.content_html}</div>')
+    content_html_display.short_description = 'Conteúdo (HTML)'
+    
+    def content_html_raw(self, obj):
+        """Exibe conteúdo HTML bruto (código-fonte) para copiar."""
+        if not obj.content_html:
+            return "-"
+        from django.utils.html import escape
+        escaped_html = escape(obj.content_html)
+        return mark_safe(
+            f'<pre style="white-space: pre-wrap; max-height: 400px; overflow-y: auto; '
+            f'padding: 1rem; border: 1px solid rgba(128, 128, 128, 0.3); '
+            f'border-radius: 4px; font-family: monospace; font-size: 0.9em; '
+            f'margin: 0; background: transparent;">{escaped_html}</pre>'
+        )
+    content_html_raw.short_description = 'HTML Bruto (Código-Fonte)'

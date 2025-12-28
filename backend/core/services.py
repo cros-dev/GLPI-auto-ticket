@@ -7,7 +7,7 @@ Google Gemini AI.
 import logging
 from typing import Optional, Dict, Tuple, List, Any
 from django.utils import timezone
-from .models import GlpiCategory, CategorySuggestion, Ticket, SatisfactionSurvey
+from .models import GlpiCategory, CategorySuggestion, Ticket, SatisfactionSurvey, KnowledgeBaseArticle
 from .prompts import get_classification_prompt, get_suggestion_prompt, get_knowledge_base_prompt
 from .constants import SYSTEMS, EVENT_KEYWORDS, GENERIC_CATEGORIES, VALID_ARTICLE_TYPES
 from .clients.gemini_client import GeminiClient
@@ -17,6 +17,7 @@ from .parsers.gemini_response_parser import (
     parse_suggestion_response,
     parse_knowledge_base_response
 )
+from .utils import markdown_to_html
 
 logger = logging.getLogger(__name__)
 
@@ -464,7 +465,7 @@ def save_category_suggestion(
     content: str
 ) -> Optional[CategorySuggestion]:
     """
-    Salva uma sugestão de categoria para revisão manual.
+    Salva uma sugestão de categoria para revisão manual (a partir de ticket real).
     
     Args:
         ticket_id: ID do ticket
@@ -480,7 +481,8 @@ def save_category_suggestion(
         
         existing = CategorySuggestion.objects.filter(
             ticket=ticket,
-            status='pending'
+            status='pending',
+            source='ticket'
         ).first()
         
         if existing:
@@ -495,7 +497,8 @@ def save_category_suggestion(
             suggested_path=suggested_path,
             ticket_title=title,
             ticket_content=content,
-            status='pending'
+            status='pending',
+            source='ticket'
         )
         return suggestion
         
@@ -504,6 +507,38 @@ def save_category_suggestion(
         return None
     except Exception as e:
         logger.error(f"Erro ao salvar sugestão de categoria: {str(e)}")
+        return None
+
+
+def save_preview_suggestion(
+    suggested_path: str,
+    title: str,
+    content: str
+) -> Optional[CategorySuggestion]:
+    """
+    Salva uma sugestão de categoria gerada via preview (sem ticket).
+    
+    Args:
+        suggested_path: Caminho completo sugerido
+        title: Título usado no preview
+        content: Conteúdo usado no preview
+        
+    Returns:
+        Optional[CategorySuggestion]: Instância criada ou None se houver erro
+    """
+    try:
+        suggestion = CategorySuggestion.objects.create(
+            ticket=None,
+            suggested_path=suggested_path,
+            ticket_title=title,
+            ticket_content=content,
+            status='pending',
+            source='preview'
+        )
+        logger.info(f"Sugestão de preview salva: {suggested_path}")
+        return suggestion
+    except Exception as e:
+        logger.error(f"Erro ao salvar sugestão de preview: {str(e)}")
         return None
 
 
@@ -650,6 +685,10 @@ def generate_knowledge_base_article(
         # Separa múltiplos artigos se houver
         articles = _split_articles(cleaned_text)
         
+        # Converte Markdown para HTML para cada artigo
+        for article in articles:
+            article['content_html'] = markdown_to_html(article['content'])
+        
         logger.info(f"Artigo(s) de Base de Conhecimento gerado(s) com sucesso. Tipo: {article_type}, Categoria: {category}, Total: {len(articles)}")
         
         return {
@@ -664,6 +703,46 @@ def generate_knowledge_base_article(
     except Exception as e:
         logger.warning(f"Erro inesperado ao gerar artigo de Base de Conhecimento: {str(e)}")
         return {'error': 'unknown', 'message': f'Erro ao comunicar com a API do Gemini: {str(e)}'}
+
+
+def save_knowledge_base_articles(
+    article_type: str,
+    category: str,
+    context: str,
+    articles: List[Dict[str, str]]
+) -> List[KnowledgeBaseArticle]:
+    """
+    Salva artigos de Base de Conhecimento gerados via preview.
+    
+    Args:
+        article_type: Tipo do artigo ('conceitual', 'operacional' ou 'troubleshooting')
+        category: Categoria da Base de Conhecimento
+        context: Contexto usado para gerar os artigos
+        articles: Lista de artigos (cada um com 'content' e 'content_html')
+        
+    Returns:
+        List[KnowledgeBaseArticle]: Lista de instâncias criadas
+    """
+    saved_articles = []
+    
+    try:
+        for article in articles:
+            kb_article = KnowledgeBaseArticle.objects.create(
+                article_type=article_type.lower(),
+                category=category.strip(),
+                context=context.strip(),
+                content=article.get('content', ''),
+                content_html=article.get('content_html', ''),
+                source='preview'
+            )
+            saved_articles.append(kb_article)
+        
+        logger.info(f"{len(saved_articles)} artigo(s) de Base de Conhecimento salvo(s) no banco. Tipo: {article_type}, Categoria: {category}")
+        return saved_articles
+        
+    except Exception as e:
+        logger.error(f"Erro ao salvar artigos de Base de Conhecimento: {str(e)}")
+        return saved_articles
 
 
 # =========================================================
@@ -800,23 +879,24 @@ def process_suggestion_review(
     is_incident = 1 if ticket_type == 1 else 0
     is_request = 1 if ticket_type == 2 else 0
     
-    # Notifica n8n
-    n8n_client = N8nClient()
-    n8n_client.notify_category_approval(
-        suggestion_id=suggestion.id,
-        ticket_id=suggestion.ticket.id,
-        suggested_path=suggestion.suggested_path,
-        parent_glpi_id=parent_glpi_id,
-        category_name=category_name,
-        status=new_status,
-        notes=notes,
-        reviewed_by=reviewed_by,
-        reviewed_at=reviewed_at.isoformat() if hasattr(reviewed_at, 'isoformat') else reviewed_at,
-        is_incident=is_incident,
-        is_request=is_request,
-        is_problem=0,
-        is_change=0
-    )
+    # Notifica n8n (apenas se houver ticket associado)
+    if suggestion.ticket:
+        n8n_client = N8nClient()
+        n8n_client.notify_category_approval(
+            suggestion_id=suggestion.id,
+            ticket_id=suggestion.ticket.id,
+            suggested_path=suggestion.suggested_path,
+            parent_glpi_id=parent_glpi_id,
+            category_name=category_name,
+            status=new_status,
+            notes=notes,
+            reviewed_by=reviewed_by,
+            reviewed_at=reviewed_at.isoformat() if hasattr(reviewed_at, 'isoformat') else reviewed_at,
+            is_incident=is_incident,
+            is_request=is_request,
+            is_problem=0,
+            is_change=0
+        )
     
     # Atualiza sugestão
     suggestion.status = new_status

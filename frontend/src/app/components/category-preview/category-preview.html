@@ -2,7 +2,7 @@
   <app-breadcrumb [items]="breadcrumbItems"></app-breadcrumb>
   
   <div class="header">
-    <h1>Preview de Categoria</h1>
+    <h1>Classificar Categoria</h1>
     <p class="subtitle">Teste e valide sugestões de categorias antes de criar tickets ou categorias no GLPI.</p>
   </div>
 
@@ -34,7 +34,7 @@
 
     <div class="form-actions">
       <p-button
-        label="Gerar Preview"
+        [label]="loading ? 'Gerando Preview...' : 'Gerar Preview'"
         icon="pi pi-search"
         severity="primary"
         [loading]="loading"

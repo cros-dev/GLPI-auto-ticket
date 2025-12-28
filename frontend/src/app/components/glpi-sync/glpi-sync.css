@@ -1,15 +1,8 @@
-.container {
-  max-width: 980px;
-}
-
-.header {
-  margin-bottom: 1rem;
-}
-
-.subtitle {
-  margin: 0.25rem 0 0;
-  color: var(--text-color-secondary);
-}
+/* Nota: Estilos globais foram movidos para styles/:
+   - typography.css: .header, h1, .subtitle
+   - utilities.css: .container
+   - components.css: .card
+*/
 
 .actions {
   display: flex;
@@ -18,17 +11,17 @@
 }
 
 .result {
-  margin-top: 1rem;
-  padding-top: 1rem;
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
   border-top: 1px solid var(--border-color-subtle);
   display: grid;
-  gap: 0.5rem;
+  gap: var(--spacing-sm);
 }
 
 .result-row {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--spacing-md);
 }
 
 

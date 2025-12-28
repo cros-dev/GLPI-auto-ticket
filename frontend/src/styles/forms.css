@@ -1,0 +1,163 @@
+/* =========================================================
+ * FORM STYLES
+ * Estilos para formulários e elementos de entrada nativos
+ * ========================================================= */
+
+/* Formulários */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+}
+
+.form-group label {
+  font-weight: 600;
+  color: var(--text-color);
+  font-size: var(--font-size-label);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.form-group label .required {
+  color: var(--error-color);
+}
+
+.form-hint {
+  color: var(--text-color-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: var(--spacing-xs);
+}
+
+/* Botão de ajuda em formulários */
+.help-icon-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--primary-color);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease, opacity 0.2s ease;
+  margin-left: var(--spacing-xs);
+  opacity: 0.35;
+}
+
+.help-icon-button:hover {
+  color: var(--primary-color-hover, var(--primary-color));
+  opacity: 1;
+}
+
+.help-icon-button:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+
+.help-icon-button i {
+  font-size: var(--font-size-md);
+}
+
+/* Ações de formulário */
+.form-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color-subtle);
+}
+
+.form-buttons {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+/* Labels básicos (quando não dentro de .form-group) */
+label {
+  display: block;
+  margin-bottom: var(--spacing-sm);
+  color: var(--text-color);
+  font-weight: 500;
+  font-size: var(--font-size-label);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-input);
+  font-family: var(--font-family);
+  box-sizing: border-box;
+  transition: border-color var(--transition);
+}
+
+/* Remove estilo de autocomplete do navegador */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px var(--app-surface-card) inset !important;
+  -webkit-text-fill-color: var(--text-color) !important;
+  box-shadow: 0 0 0 30px var(--app-surface-card) inset !important;
+  caret-color: var(--text-color);
+}
+
+/* Placeholders mais discretos - Padronizado globalmente */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-color-secondary);
+  opacity: 0.5;
+}
+
+input::-webkit-input-placeholder,
+textarea::-webkit-input-placeholder {
+  color: var(--text-color-secondary);
+  opacity: 0.5;
+}
+
+input::-moz-placeholder,
+textarea::-moz-placeholder {
+  color: var(--text-color-secondary);
+  opacity: 0.5;
+}
+
+input:-ms-input-placeholder,
+textarea:-ms-input-placeholder {
+  color: var(--text-color-secondary);
+  opacity: 0.5;
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+/* =========================================================
+ * ESTILOS PADRONIZADOS PARA CAMPOS DESABILITADOS
+ * TODOS os campos desabilitados usam EXATAMENTE a mesma cor
+ * Nota: Estilos do PrimeNG foram movidos para styles/primeng-overrides.css
+ * ========================================================= */
+
+/* Inputs e textareas nativos desabilitados */
+input:disabled,
+textarea:disabled,
+input[disabled],
+textarea[disabled],
+input.p-disabled,
+textarea.p-disabled,
+select:disabled,
+select[disabled] {
+  background-color: var(--bg-disabled) !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+  color: var(--text-color) !important;
+}
+

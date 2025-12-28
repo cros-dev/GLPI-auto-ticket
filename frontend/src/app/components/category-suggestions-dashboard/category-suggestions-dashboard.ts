@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
@@ -36,7 +36,8 @@ interface DashboardCard {
   standalone: true,
   imports: [CommonModule, RouterModule, ButtonModule, BreadcrumbComponent, LoadingComponent],
   templateUrl: './category-suggestions-dashboard.html',
-  styleUrl: './category-suggestions-dashboard.css'
+  styleUrl: './category-suggestions-dashboard.css',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CategorySuggestionsDashboard implements OnInit, OnDestroy {
   /** Estatísticas carregadas. */
@@ -57,7 +58,8 @@ export class CategorySuggestionsDashboard implements OnInit, OnDestroy {
   /** Itens do breadcrumb. */
   breadcrumbItems: BreadcrumbItem[] = [
     { label: 'Início', route: '/' },
-    { label: 'Sugestões de Categorias' }
+    { label: 'Sugestões de Categorias' },
+    { label: 'GLPI' }
   ];
 
   constructor(
@@ -95,6 +97,7 @@ export class CategorySuggestionsDashboard implements OnInit, OnDestroy {
     this.loading = true;
     this.error = null;
     this.stats = null; // Garante que stats está null enquanto carrega
+    this.cdr.markForCheck();
 
     this.apiService.getCategorySuggestionStats().pipe(
       takeUntil(this.destroy$)

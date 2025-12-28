@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.shortcuts import render
 import logging
 
-from .models import GlpiCategory, Ticket, CategorySuggestion, SatisfactionSurvey
+from .models import GlpiCategory, Ticket, CategorySuggestion, SatisfactionSurvey, KnowledgeBaseArticle
 from .serializers import (
     GlpiCategorySerializer, 
     TicketSerializer, 
@@ -34,8 +34,10 @@ from .services import (
     classify_ticket,
     classify_ticket_with_gemini,
     generate_category_suggestion,
+    save_preview_suggestion,
     determine_ticket_type,
     generate_knowledge_base_article,
+    save_knowledge_base_articles,
     update_ticket_with_classification,
     handle_classification_failure,
     process_suggestion_review,
@@ -174,12 +176,12 @@ class GlpiCategorySyncFromApiView(APIView):
     na API serão removidas automaticamente do banco de dados.
     
     Configuração necessária no .env:
-        GLPI_LEGACY_API_URL=http://172.16.0.180:81
+        GLPI_LEGACY_API_URL=http://172.16.0.180:81/apirest.php
         GLPI_LEGACY_API_USER=glpi
         GLPI_LEGACY_API_PASSWORD=senha
         GLPI_LEGACY_APP_TOKEN=token_app (opcional)
     
-    Nota: A URL será automaticamente formatada para http://172.16.0.180:81/api.php/v1
+    Nota: A URL deve ser configurada completa, incluindo o caminho da API.
     """
     permission_classes = [IsAuthenticated]
     
@@ -370,10 +372,17 @@ class CategorySuggestionListView(generics.ListAPIView):
     def get_queryset(self):
         queryset = CategorySuggestion.objects.all().order_by('-created_at')
         status_filter = self.request.query_params.get('status', None)
+        source_filter = self.request.query_params.get('source', None)
+        
         if status_filter:
             queryset = queryset.filter(status=status_filter)
         else:
             queryset = queryset.filter(status='pending')
+        
+        # Filtro opcional por origem (ticket ou preview)
+        if source_filter:
+            queryset = queryset.filter(source=source_filter)
+        
         return queryset
     
     serializer_class = CategorySuggestionListSerializer
@@ -544,10 +553,11 @@ class CategorySuggestionUpdateView(APIView):
         return Response({
             'id': suggestion.id,
             'suggested_path': suggestion.suggested_path,
-            'ticket_id': suggestion.ticket.id,
+            'ticket_id': suggestion.ticket.id if suggestion.ticket else None,
             'ticket_title': suggestion.ticket_title,
             'ticket_content': suggestion.ticket_content if suggestion.ticket_content else '',
             'status': suggestion.status,
+            'source': suggestion.source,
             'notes': suggestion.notes,
             'created_at': suggestion.created_at,
             'updated_at': suggestion.updated_at,
@@ -676,13 +686,17 @@ class CategorySuggestionPreviewView(APIView):
             path_parts = [category_name]
         ticket_type, ticket_type_label = determine_ticket_type(path_parts)
         
+        saved_suggestion = save_preview_suggestion(suggested_path, title, content)
+        suggestion_id = saved_suggestion.id if saved_suggestion else None
+        
         return Response(
             {
                 "suggested_path": suggested_path,
                 "ticket_type": ticket_type,
                 "ticket_type_label": ticket_type_label,
                 "classification_method": "new_suggestion",
-                "note": "Nova sugestão gerada (categoria não encontrada). Esta é apenas uma prévia."
+                "suggestion_id": suggestion_id,
+                "note": "Nova sugestão gerada (categoria não encontrada). Esta prévia foi salva para revisão."
             },
             status=status.HTTP_200_OK
         )
@@ -891,6 +905,18 @@ class KnowledgeBaseArticleView(APIView):
                 {'error': error_type, 'message': error_message},
                 status=status_code
             )
+        
+        if 'articles' in result and result['articles']:
+            saved_articles = save_knowledge_base_articles(
+                article_type=article_type,
+                category=category,
+                context=context,
+                articles=result['articles']
+            )
+            if saved_articles:
+                for i, article in enumerate(result['articles']):
+                    if i < len(saved_articles):
+                        article['id'] = saved_articles[i].id
         
         response_serializer = KnowledgeBaseArticleResponseSerializer(result)
         return Response(response_serializer.data, status=status.HTTP_200_OK)

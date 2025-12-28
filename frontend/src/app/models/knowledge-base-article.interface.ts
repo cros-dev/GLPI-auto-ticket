@@ -16,8 +16,11 @@ export interface KnowledgeBaseArticleRequest {
  * Interface para um artigo individual de Base de Conhecimento.
  */
 export interface KnowledgeBaseArticleItem {
-  /** Texto completo do artigo */
+  /** Texto completo do artigo em Markdown */
   content: string;
+  
+  /** Texto completo do artigo convertido para HTML */
+  content_html: string;
 }
 
 /**

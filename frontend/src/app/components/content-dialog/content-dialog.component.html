@@ -10,9 +10,24 @@
   [closable]="true"
   [draggable]="false"
   [resizable]="false">
+  <ng-template pTemplate="content">
   @if (content) {
-    <p class="dialog-content">{{ content }}</p>
+      <div class="dialog-content" [innerHTML]="safeContent"></div>
   } @else {
     <p>Nenhum conteúdo disponível.</p>
+    }
+  </ng-template>
+  @if (showCopyButton) {
+    <ng-template pTemplate="footer">
+      <div class="dialog-footer">
+        <p-button
+          label="Copiar HTML"
+          icon="pi pi-copy"
+          severity="secondary"
+          (onClick)="onCopyClick()"
+          title="Copia o conteúdo em formato HTML para colar no GLPI">
+        </p-button>
+      </div>
+    </ng-template>
   }
 </p-dialog>
