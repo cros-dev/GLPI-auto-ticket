@@ -188,6 +188,13 @@ N8N_CATEGORY_APPROVAL_WEBHOOK_URL = os.getenv('N8N_CATEGORY_APPROVAL_WEBHOOK_URL
 # IA - Google Gemini
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
+# Zoho API (SSPR)
+ZOHO_CLIENT_ID = os.getenv('ZOHO_CLIENT_ID')
+ZOHO_CLIENT_SECRET = os.getenv('ZOHO_CLIENT_SECRET')
+ZOHO_REFRESH_TOKEN = os.getenv('ZOHO_REFRESH_TOKEN')  # Auto-criado no banco se fornecido
+ZOHO_ORGANIZATION_ID = os.getenv('ZOHO_ORGANIZATION_ID')  # zoid (Organization ID) - opcional, mas recomendado
+ZOHO_API_DOMAIN = os.getenv('ZOHO_API_DOMAIN', 'https://www.zohoapis.com')
+
 
 # =========================================================
 # DJANGO REST FRAMEWORK

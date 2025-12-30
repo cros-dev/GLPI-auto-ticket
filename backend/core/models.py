@@ -12,7 +12,13 @@ import secrets
 from datetime import timedelta
 from django.db import models
 from django.utils import timezone
-from .constants import SUGGESTION_SOURCE_CHOICES, ARTICLE_TYPE_CHOICES, KNOWLEDGE_BASE_ARTICLE_SOURCE_CHOICES
+from .constants import (
+    SUGGESTION_SOURCE_CHOICES, 
+    ARTICLE_TYPE_CHOICES, 
+    KNOWLEDGE_BASE_ARTICLE_SOURCE_CHOICES,
+    CATEGORY_SUGGESTION_STATUS_CHOICES,
+    SATISFACTION_SURVEY_RATING_CHOICES
+)
 
 
 class GlpiCategory(models.Model):
@@ -141,12 +147,6 @@ class CategorySuggestion(models.Model):
     - Preview manual (source='preview'): quando usuário testa via endpoint de preview
     """
     
-    STATUS_CHOICES = [
-        ('pending', 'Pendente'),
-        ('approved', 'Aprovada'),
-        ('rejected', 'Rejeitada'),
-    ]
-    
     ticket = models.ForeignKey(
         Ticket,
         on_delete=models.CASCADE,
@@ -180,7 +180,7 @@ class CategorySuggestion(models.Model):
     
     status = models.CharField(
         max_length=20,
-        choices=STATUS_CHOICES,
+        choices=CATEGORY_SUGGESTION_STATUS_CHOICES,
         default='pending',
         help_text="Status da sugestão"
     )
@@ -221,14 +221,6 @@ class SatisfactionSurvey(models.Model):
     no e-mail enviado pelo GLPI após o fechamento/resolução de um ticket.
     """
     
-    RATING_CHOICES = [
-        (1, '1 - Muito Insatisfeito'),
-        (2, '2 - Insatisfeito'),
-        (3, '3 - Neutro'),
-        (4, '4 - Satisfeito'),
-        (5, '5 - Muito Satisfeito'),
-    ]
-    
     ticket = models.ForeignKey(
         Ticket,
         on_delete=models.CASCADE,
@@ -237,7 +229,7 @@ class SatisfactionSurvey(models.Model):
     )
     
     rating = models.IntegerField(
-        choices=RATING_CHOICES,
+        choices=SATISFACTION_SURVEY_RATING_CHOICES,
         help_text="Nota de satisfação do usuário (1 a 5)"
     )
     

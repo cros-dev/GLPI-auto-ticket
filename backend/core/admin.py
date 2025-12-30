@@ -147,7 +147,7 @@ class TicketAdmin(admin.ModelAdmin):
         
         suggestion = CategorySuggestion.objects.filter(
             ticket=obj,
-            status='pending'
+            status='pending'  # Valor do choice CATEGORY_SUGGESTION_STATUS_CHOICES
         ).order_by('-created_at').first()
         
         if suggestion:
@@ -386,8 +386,8 @@ class CategorySuggestionAdmin(admin.ModelAdmin):
             queryset: QuerySet de sugestões selecionadas
         """
         count = 0
-        for suggestion in queryset.filter(status='pending'):
-            suggestion.status = 'approved'
+        for suggestion in queryset.filter(status='pending'):  # Valor do choice CATEGORY_SUGGESTION_STATUS_CHOICES
+            suggestion.status = 'approved'  # Valor do choice CATEGORY_SUGGESTION_STATUS_CHOICES
             suggestion.reviewed_at = timezone.now()
             suggestion.reviewed_by = request.user.username
             suggestion.save()
@@ -404,8 +404,8 @@ class CategorySuggestionAdmin(admin.ModelAdmin):
             queryset: QuerySet de sugestões selecionadas
         """
         count = 0
-        for suggestion in queryset.filter(status='pending'):
-            suggestion.status = 'rejected'
+        for suggestion in queryset.filter(status='pending'):  # Valor do choice CATEGORY_SUGGESTION_STATUS_CHOICES
+            suggestion.status = 'rejected'  # Valor do choice CATEGORY_SUGGESTION_STATUS_CHOICES
             suggestion.reviewed_at = timezone.now()
             suggestion.reviewed_by = request.user.username
             suggestion.save()
@@ -425,8 +425,8 @@ class CategorySuggestionAdmin(admin.ModelAdmin):
             queryset: QuerySet de sugestões selecionadas
         """
         count = 0
-        for suggestion in queryset.exclude(status='pending'):
-            suggestion.status = 'pending'
+        for suggestion in queryset.exclude(status='pending'):  # Valor do choice CATEGORY_SUGGESTION_STATUS_CHOICES
+            suggestion.status = 'pending'  # Valor do choice CATEGORY_SUGGESTION_STATUS_CHOICES
             suggestion.reviewed_at = None
             suggestion.reviewed_by = None
             suggestion.save()

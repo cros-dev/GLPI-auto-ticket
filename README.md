@@ -26,8 +26,14 @@ auto-ticket/
 │   ├── core/            # App principal (tickets, categorias)
 │   ├── config/          # Configurações do Django
 │   └── manage.py
+├── frontend/            # Aplicação Angular
 └── README.md
 ```
+
+## 📚 Documentação Técnica
+
+Para análise técnica detalhada do projeto, arquitetura, padrões e recomendações, consulte:
+- [Análise Técnica do Projeto](ANALISE_TECNICA_PROJETO_ATUAL.md) - Análise completa da arquitetura, padrões, pontos fortes e melhorias sugeridas
 
 ## 🛠️ Instalação
 

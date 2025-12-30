@@ -47,3 +47,19 @@ KNOWLEDGE_BASE_ARTICLE_SOURCE_CHOICES = [
     ('preview', 'Preview Manual'),
 ]
 
+# Choices para status de sugestões de categoria
+CATEGORY_SUGGESTION_STATUS_CHOICES = [
+    ('pending', 'Pendente'),
+    ('approved', 'Aprovada'),
+    ('rejected', 'Rejeitada'),
+]
+
+# Choices para rating de pesquisas de satisfação
+SATISFACTION_SURVEY_RATING_CHOICES = [
+    (1, '1 - Muito Insatisfeito'),
+    (2, '2 - Insatisfeito'),
+    (3, '3 - Neutro'),
+    (4, '4 - Satisfeito'),
+    (5, '5 - Muito Satisfeito'),
+]
+
