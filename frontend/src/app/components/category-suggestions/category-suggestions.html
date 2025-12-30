@@ -1,0 +1,179 @@
+@if (showDashboard) {
+  <!-- Dashboard (quando não há query params) -->
+  <app-category-suggestions-dashboard></app-category-suggestions-dashboard>
+} @else {
+  <!-- Lista (quando há query params de status) -->
+  <div class="container">
+    <app-breadcrumb [items]="breadcrumbItems"></app-breadcrumb>
+    
+    <div class="header">
+      <h1>{{ pageTitle }}</h1>
+      @if (currentStatus === 'pending') {
+        <p class="subtitle">Revise e aprove ou rejeite sugestões de categorias geradas automaticamente a partir dos tickets do GLPI.</p>
+      }
+      @if (currentStatus === 'approved') {
+        <p class="subtitle">Visualize as sugestões de categorias que foram aprovadas e já estão disponíveis no sistema.</p>
+      }
+      @if (currentStatus === 'rejected') {
+        <p class="subtitle">Visualize as sugestões de categorias que foram rejeitadas.</p>
+      }
+    </div>
+
+    <app-loading [loading]="loading" message="Carregando sugestões..."></app-loading>
+
+    @if (!loading && error) {
+      <!-- Error -->
+      <div class="error">
+        <p>{{ error }}</p>
+        <button (click)="loadSuggestions()">Tentar novamente</button>
+      </div>
+    }
+
+    @if (!loading && !error && suggestions.length === 0) {
+      <!-- Empty State -->
+      <div class="empty">
+        @if (currentStatus === 'pending') {
+          <p>Nenhuma sugestão pendente encontrada.</p>
+        }
+        @if (currentStatus === 'approved') {
+          <p>Nenhuma sugestão aprovada encontrada.</p>
+        }
+        @if (currentStatus === 'rejected') {
+          <p>Nenhuma sugestão rejeitada encontrada.</p>
+        }
+      </div>
+    }
+
+    @if (!loading && !error && suggestions.length > 0) {
+      <!-- Lista de Sugestões -->
+      <div class="suggestions-list">
+        @for (suggestion of suggestions; track suggestion.id) {
+          <div class="card suggestion-card" [ngClass]="'status-' + suggestion.status">
+            <div class="suggestion-header">
+              <div class="header-left">
+                <div class="badge-id">{{ suggestion.id }}</div>
+                <h2 [title]="suggestion.suggested_path">{{ suggestion.suggested_path }}</h2>
+              </div>
+              <div class="badge" 
+                   [class.pending]="suggestion.status === 'pending'"
+                   [class.approved]="suggestion.status === 'approved'"
+                   [class.rejected]="suggestion.status === 'rejected'">
+                {{ translateStatus(suggestion.status) }}
+              </div>
+            </div>
+
+            <div class="suggestion-content">
+              <div class="ticket-info">
+                <p><strong>Ticket ID:</strong> #{{ suggestion.ticket_id }}</p>
+                <p><strong>Título:</strong> {{ decodeHtml(suggestion.ticket_title) }}</p>
+                <p><strong>Criado em:</strong> {{ formatDate(suggestion.created_at) }}</p>
+              </div>
+
+              @if (suggestion.ticket_content) {
+                <div
+                  class="ticket-content ticket-content-clickable"
+                  (click)="openContentDialog(suggestion.ticket_title, suggestion.ticket_content)"
+                  title="Clique para ver o conteúdo completo">
+                  <p><strong>Conteúdo do ticket:</strong></p>
+                  <i class="pi pi-window-maximize content-expand-icon" aria-hidden="true"></i>
+                  <p class="content-text content-preview">
+                    {{ decodeHtml(suggestion.ticket_content) }}
+                  </p>
+                </div>
+              }
+            </div>
+
+            @if (!isApprovedView) {
+              <div class="suggestion-actions">
+                <p-button
+                  label="Editar"
+                  icon="pi pi-pencil"
+                  severity="secondary"
+                  (onClick)="openEditDialog(suggestion)">
+                </p-button>
+                <p-button
+                  label="Aprovar"
+                  icon="pi pi-check"
+                  severity="success"
+                  (onClick)="approveSuggestion(suggestion.id)">
+                </p-button>
+                <p-button
+                  label="Rejeitar"
+                  icon="pi pi-times"
+                  severity="danger"
+                  (onClick)="rejectSuggestion(suggestion.id)">
+                </p-button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <!-- Dialog para exibir conteúdo do ticket -->
+  <app-content-dialog
+    [(visible)]="showContentDialog"
+    [title]="dialogTitle"
+    [content]="dialogContent">
+  </app-content-dialog>
+
+  <!-- Dialog para editar sugestão -->
+  <p-dialog
+    [(visible)]="showEditDialog"
+    [modal]="true"
+    [style]="{ width: '600px' }"
+    header="Editar Sugestão de Categoria"
+    [closable]="true"
+    (onHide)="closeEditDialog()">
+    <div class="edit-dialog-content">
+      @if (editingSuggestion) {
+        <div class="form-group">
+          <label for="suggested-path">Caminho da Categoria <span class="required">*</span></label>
+          <input
+            id="suggested-path"
+            type="text"
+            pInputText
+            [(ngModel)]="editingSuggestedPath"
+            [disabled]="savingEdit"
+            placeholder="Ex: TI > Requisição > Acesso > GLPI > Criação de Usuário / Conta"
+            class="w-full" />
+          <small class="form-hint">Digite o caminho completo da categoria separado por " > "</small>
+        </div>
+
+        <div class="form-group">
+          <label for="notes">Notas (Opcional)</label>
+          <textarea
+            id="notes"
+            [(ngModel)]="editingNotes"
+            [disabled]="savingEdit"
+            [rows]="4"
+            placeholder="Adicione notas sobre esta sugestão..."
+            class="p-inputtextarea p-inputtext p-component w-full"></textarea>
+        </div>
+
+        <div class="form-info">
+          <p><strong>Ticket ID:</strong> #{{ editingSuggestion.ticket_id }}</p>
+          <p><strong>Título:</strong> {{ decodeHtml(editingSuggestion.ticket_title) }}</p>
+        </div>
+      }
+    </div>
+    <ng-template pTemplate="footer">
+      <p-button
+        label="Cancelar"
+        icon="pi pi-times"
+        severity="secondary"
+        [disabled]="savingEdit"
+        (onClick)="closeEditDialog()">
+      </p-button>
+      <p-button
+        label="Salvar"
+        icon="pi pi-check"
+        severity="success"
+        [loading]="savingEdit"
+        [disabled]="savingEdit || !editingSuggestedPath.trim()"
+        (onClick)="saveEdit()">
+      </p-button>
+    </ng-template>
+  </p-dialog>
+}

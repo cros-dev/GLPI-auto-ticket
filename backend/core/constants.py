@@ -1,0 +1,49 @@
+"""
+Constantes e configurações do sistema.
+
+Centraliza todas as constantes usadas em múltiplos módulos para facilitar
+manutenção e evitar duplicação.
+"""
+
+# Sistemas conhecidos para detecção em tickets
+SYSTEMS = [
+    'anews', 'arion', 'glpi', 'ad', 'active directory', 'outlook', 'excel', 
+    'word', 'teams', 'sharepoint', 'sap', 'erp', 'crm', 'bi', 'power bi'
+]
+
+# Palavras-chave relacionadas a eventos/montagem de setup
+EVENT_KEYWORDS = [
+    'transmissão', 'transmissao', 'vídeo conferência', 'video conferencia', 
+    'evento', 'premiação', 'premiacao', 'montagem', 'setup', 'apoio', 
+    'cerimônia', 'cerimonia', 'auditório', 'auditorio'
+]
+
+# Categorias genéricas que devem ser evitadas
+GENERIC_CATEGORIES = [
+    'periféricos', 'outros', 'outros acessos', 'outros equipamentos', 
+    'solicitação geral', 'problema geral', 'problema geral de sistema',
+    'equipamentos', 'hardware', 'software', 'sistemas', 'acesso'
+]
+
+# Tipos válidos de artigos de Base de Conhecimento
+VALID_ARTICLE_TYPES = ['conceitual', 'operacional', 'troubleshooting']
+
+# Choices para tipos de artigos de Base de Conhecimento
+ARTICLE_TYPE_CHOICES = [
+    ('conceitual', 'Conceitual'),
+    ('operacional', 'Operacional'),
+    ('troubleshooting', 'Troubleshooting'),
+]
+
+# Choices para origem de sugestões/artigos
+SUGGESTION_SOURCE_CHOICES = [
+    ('ticket', 'Ticket Real'),
+    ('preview', 'Preview Manual'),
+]
+
+# Choices para origem de artigos de Base de Conhecimento
+# Por enquanto apenas 'preview', mas pode ser expandido no futuro
+KNOWLEDGE_BASE_ARTICLE_SOURCE_CHOICES = [
+    ('preview', 'Preview Manual'),
+]
+

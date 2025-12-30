@@ -1,0 +1,21 @@
+@if (isMobile) {
+  <!-- Mobile: drawer overlay -->
+  <p-drawer 
+    [(visible)]="visible"
+    position="left"
+    [modal]="true"
+    [showCloseIcon]="false"
+    styleClass="sidenav-drawer"
+    (onHide)="onHide()">
+    
+    <div class="sidenav-content">
+      <p-menu [model]="menuItems" styleClass="sidenav-menu"></p-menu>
+    </div>
+  </p-drawer>
+} @else {
+  <!-- Desktop: sidenav no layout -->
+  <div class="sidenav-content">
+    <p-menu [model]="menuItems" styleClass="sidenav-menu"></p-menu>
+  </div>
+}
+

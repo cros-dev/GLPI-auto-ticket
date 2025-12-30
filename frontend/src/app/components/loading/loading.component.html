@@ -1,0 +1,13 @@
+@if (loading) {
+  <div class="loading-container">
+    <p-progressSpinner
+      styleClass="loading-spinner"
+      strokeWidth="4"
+      animationDuration="1s"
+      ariaLabel="Carregando">
+    </p-progressSpinner>
+    @if (message) {
+      <p class="loading-message">{{ message }}</p>
+    }
+  </div>
+}

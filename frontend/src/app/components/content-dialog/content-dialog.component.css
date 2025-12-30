@@ -1,0 +1,82 @@
+.dialog-content {
+  color: var(--text-color);
+  font-size: var(--font-size-body-small);
+  line-height: 1.8;
+  margin: 0;
+  padding: 0;
+}
+
+.dialog-content h1,
+.dialog-content h2,
+.dialog-content h3,
+.dialog-content h4 {
+  color: var(--text-color);
+  margin-top: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.dialog-content h1 {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  border-bottom: 2px solid var(--border-color-subtle);
+  padding-bottom: var(--spacing-xs);
+}
+
+.dialog-content h2 {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+}
+
+.dialog-content h3 {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.dialog-content h4 {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.dialog-content p {
+  margin: var(--spacing-sm) 0;
+}
+
+.dialog-content ul,
+.dialog-content ol {
+  margin: var(--spacing-sm) 0;
+  padding-left: var(--spacing-lg);
+}
+
+.dialog-content li {
+  margin: var(--spacing-xs) 0;
+}
+
+.dialog-content code {
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-code);
+}
+
+.dialog-content pre {
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--border-radius-sm);
+  padding: var(--spacing-md);
+  overflow-x: auto;
+}
+
+.dialog-content pre code {
+  border: none;
+  padding: 0;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color-subtle);
+}

@@ -1,0 +1,43 @@
+.main-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.layout-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.content-area {
+  flex: 1;
+  padding: var(--content-padding);
+  overflow-y: auto;
+  background: var(--bg-color);
+}
+
+/* Desktop: sidenav no layout, empurra conteúdo */
+@media (min-width: 768px) {
+  .sidenav-layout {
+    width: 0;
+    flex-shrink: 0;
+    transition: width var(--transition);
+    overflow: hidden;
+    background: var(--sidebar-bg-color);
+    border-right: 1px solid var(--sidebar-border-color);
+  }
+
+  .sidenav-layout.open {
+    width: var(--sidebar-width);
+  }
+}
+
+/* Mobile: drawer overlay */
+@media (max-width: 767px) {
+  .sidenav-layout {
+    display: none;
+  }
+}

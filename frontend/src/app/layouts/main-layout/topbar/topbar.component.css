@@ -1,0 +1,38 @@
+.topbar {
+  height: var(--topbar-height);
+  padding: 0 var(--spacing-lg);
+  border-bottom: 1px solid var(--topbar-border-color);
+  background: var(--topbar-bg-color);
+  border-radius: 0;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.logo {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  color: var(--topbar-brand-color);
+}
+
+.title {
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: var(--topbar-text-color);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+

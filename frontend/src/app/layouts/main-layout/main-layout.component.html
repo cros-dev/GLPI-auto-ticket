@@ -1,0 +1,16 @@
+<div class="main-layout">
+  <app-topbar (toggleSidenav)="onToggleSidenav()"></app-topbar>
+  
+  <div class="layout-content">
+    <div class="sidenav-layout" [class.open]="sidenavVisible">
+      <app-sidenav [(visible)]="sidenavVisible"></app-sidenav>
+    </div>
+    
+    <main class="content-area">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+  
+  <p-confirmDialog></p-confirmDialog>
+</div>
+

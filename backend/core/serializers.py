@@ -7,7 +7,8 @@ Este módulo contém todos os serializers usados para:
 - Transformação entre modelos Django e JSON
 """
 from rest_framework import serializers
-from .models import Ticket, GlpiCategory, SatisfactionSurvey
+from .models import Ticket, GlpiCategory, SatisfactionSurvey, CategorySuggestion, KnowledgeBaseArticle
+from .constants import VALID_ARTICLE_TYPES
 
 
 # =========================================================
@@ -168,3 +169,149 @@ class SatisfactionSurveySerializer(serializers.Serializer):
         allow_blank=True,
         help_text="Comentário opcional do usuário sobre o atendimento"
     )
+
+
+# =========================================================
+# 7. SUGESTÕES DE CATEGORIAS
+# =========================================================
+
+class CategorySuggestionReviewSerializer(serializers.Serializer):
+    """
+    Serializer para aprovação/rejeição de sugestões de categorias.
+    
+    Valida payload opcional enviado pelo frontend ao revisar uma sugestão.
+    
+    Campos:
+        notes: Observações do revisor (opcional)
+    """
+    notes = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        help_text="Notas opcionais sobre a aprovação/rejeição"
+    )
+
+
+class CategorySuggestionUpdateSerializer(serializers.Serializer):
+    """
+    Serializer para edição de sugestões de categorias.
+    
+    Permite editar o caminho sugerido e notas de sugestões pendentes.
+    
+    Campos:
+        suggested_path: Caminho completo da categoria (obrigatório)
+        notes: Notas adicionais sobre a sugestão (opcional)
+    """
+    suggested_path = serializers.CharField(
+        max_length=1024,
+        help_text="Caminho completo sugerido (ex.: 'TI > Requisição > Administrativo > Montagem de Setup > Transmissão/Vídeo Conferência')"
+    )
+    notes = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        help_text="Notas adicionais sobre a sugestão"
+    )
+
+
+class CategorySuggestionListSerializer(serializers.ModelSerializer):
+    """
+    Serializer para listagem de sugestões de categorias.
+    
+    Usado para serializar sugestões de categorias na listagem.
+    Suporta sugestões de tickets reais e previews (sem ticket).
+    """
+    ticket_id = serializers.SerializerMethodField()
+    ticket_title = serializers.CharField(read_only=True)
+    ticket_content = serializers.CharField(read_only=True)
+    source = serializers.CharField(read_only=True)
+    
+    class Meta:
+        model = CategorySuggestion
+        fields = [
+            'id',
+            'suggested_path',
+            'ticket_id',
+            'ticket_title',
+            'ticket_content',
+            'status',
+            'source',
+            'created_at',
+            'reviewed_at',
+            'reviewed_by',
+            'notes'
+        ]
+    
+    def get_ticket_id(self, obj):
+        """Retorna o ID do ticket se existir, None caso contrário."""
+        return obj.ticket.id if obj.ticket else None
+
+
+class KnowledgeBaseArticleRequestSerializer(serializers.Serializer):
+    """
+    Serializer para requisição de geração de artigo de Base de Conhecimento.
+    
+    Campos:
+        article_type: Tipo do artigo ('conceitual', 'operacional' ou 'troubleshooting')
+        category: Categoria da Base de Conhecimento
+        context: Contexto do ambiente, sistemas, servidores, softwares envolvidos
+    """
+    article_type = serializers.ChoiceField(
+        choices=VALID_ARTICLE_TYPES,
+        help_text=f"Tipo do artigo: {', '.join(VALID_ARTICLE_TYPES)}"
+    )
+    category = serializers.CharField(
+        max_length=512,
+        help_text="Categoria da Base de Conhecimento (ex: 'RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher > Playout')"
+    )
+    context = serializers.CharField(
+        help_text="Contexto do ambiente, sistemas, servidores, softwares envolvidos"
+    )
+
+
+class KnowledgeBaseArticleListSerializer(serializers.ModelSerializer):
+    """
+    Serializer para listagem de artigos de Base de Conhecimento.
+    
+    Usado para serializar artigos na listagem.
+    """
+    
+    class Meta:
+        model = KnowledgeBaseArticle
+        fields = [
+            'id',
+            'article_type',
+            'category',
+            'context',
+            'content',
+            'content_html',
+            'source',
+            'created_at',
+            'updated_at'
+        ]
+
+
+class KnowledgeBaseArticleItemSerializer(serializers.Serializer):
+    """
+    Serializer para um artigo individual de Base de Conhecimento.
+    
+    Campos:
+        content: Texto completo do artigo em Markdown
+        content_html: Texto completo do artigo convertido para HTML
+    """
+    content = serializers.CharField(help_text="Texto completo do artigo em Markdown")
+    content_html = serializers.CharField(help_text="Texto completo do artigo convertido para HTML")
+
+
+class KnowledgeBaseArticleResponseSerializer(serializers.Serializer):
+    """
+    Serializer para resposta de geração de artigo de Base de Conhecimento.
+    
+    Campos:
+        articles: Lista de artigos gerados (pode conter múltiplos artigos)
+        article_type: Tipo do artigo gerado
+        category: Categoria informada
+    """
+    articles = KnowledgeBaseArticleItemSerializer(many=True, help_text="Lista de artigos gerados")
+    article_type = serializers.CharField(help_text="Tipo do artigo gerado")
+    category = serializers.CharField(help_text="Categoria da Base de Conhecimento")

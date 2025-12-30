@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     # Terceiros
     'rest_framework',
     'rest_framework.authtoken',
+    'corsheaders',
 
     # Apps locais
     'accounts',
@@ -66,6 +67,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # Deve estar antes de CommonMiddleware
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -180,7 +182,8 @@ GLPI_LEGACY_API_PASSWORD = os.getenv('GLPI_LEGACY_API_PASSWORD')
 GLPI_LEGACY_APP_TOKEN = os.getenv('GLPI_LEGACY_APP_TOKEN')
 
 # n8n
-N8N_WEBHOOK_URL = os.getenv('N8N_WEBHOOK_URL')
+N8N_SURVEY_RESPONSE_WEBHOOK_URL = os.getenv('N8N_SURVEY_RESPONSE_WEBHOOK_URL')
+N8N_CATEGORY_APPROVAL_WEBHOOK_URL = os.getenv('N8N_CATEGORY_APPROVAL_WEBHOOK_URL')
 
 # IA - Google Gemini
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
@@ -221,6 +224,31 @@ LOGGING = {
         'level': 'INFO',
     },
 }
+
+
+# =========================================================
+# CORS (Para Frontend Angular)
+# =========================================================
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:4200",  # Angular dev server padrão
+]
+
+# Permitir credenciais (cookies, auth headers)
+CORS_ALLOW_CREDENTIALS = True
+
+# Headers permitidos
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 
 # =========================================================

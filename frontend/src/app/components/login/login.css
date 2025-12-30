@@ -1,0 +1,45 @@
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-color);
+  padding: var(--spacing-xl);
+}
+
+.login-card {
+  /* Herda .card e adiciona estilos específicos */
+  padding: 2.5rem;
+  box-shadow: var(--shadow-md);
+  width: 100%;
+  max-width: 400px;
+}
+
+/* Nota: Estilos globais foram movidos para styles/typography.css e styles/components.css */
+
+h1 {
+  /* Estilo específico: centralizado e tamanho maior */
+  text-align: center;
+  font-size: var(--font-size-2xl);
+  margin-bottom: var(--spacing-sm);
+}
+
+.subtitle {
+  /* Estilo específico: centralizado e margem maior */
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+  font-size: var(--font-size-body-small);
+}
+
+.error-message {
+  /* Estilo específico: background e padding diferentes */
+  background-color: var(--app-surface-card);
+  padding: 0.75rem;
+  border-radius: var(--border-radius-sm);
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-label);
+  border: 1px solid var(--border-color);
+}
+
+
+

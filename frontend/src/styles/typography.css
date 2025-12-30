@@ -1,0 +1,27 @@
+/* =========================================================
+ * TYPOGRAPHY STYLES
+ * Estilos globais para elementos de tipografia
+ * ========================================================= */
+
+/* Headers comuns */
+.header {
+  margin-bottom: var(--spacing-lg);
+}
+
+h1 {
+  margin: 0;
+  color: var(--text-color);
+}
+
+.subtitle {
+  margin: var(--spacing-xs) 0 0;
+  color: var(--text-color-secondary);
+}
+
+/* Card headings */
+.card h2 {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--text-color);
+  font-size: var(--font-size-lg);
+}
+

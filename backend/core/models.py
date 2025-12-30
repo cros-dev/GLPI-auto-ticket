@@ -5,12 +5,14 @@ Este módulo contém os modelos principais:
 - GlpiCategory: Categorias GLPI para classificação de tickets
 - Ticket: Tickets recebidos do GLPI via webhook
 - CategorySuggestion: Sugestões de categorias geradas pela IA para revisão manual
+- KnowledgeBaseArticle: Artigos de Base de Conhecimento gerados pela IA
 - SatisfactionSurvey: Pesquisas de satisfação respondidas pelos usuários
 """
 import secrets
 from datetime import timedelta
 from django.db import models
 from django.utils import timezone
+from .constants import SUGGESTION_SOURCE_CHOICES, ARTICLE_TYPE_CHOICES, KNOWLEDGE_BASE_ARTICLE_SOURCE_CHOICES
 
 
 class GlpiCategory(models.Model):
@@ -62,7 +64,7 @@ class Ticket(models.Model):
     # ID do ticket (mesmo ID do GLPI)
     id = models.IntegerField(
         primary_key=True,
-        verbose_name='ID do Ticket GLPI'
+        verbose_name = 'ID do Ticket GLPI'
     )
 
     raw_payload = models.JSONField(
@@ -133,6 +135,10 @@ class CategorySuggestion(models.Model):
     
     Armazena sugestões de novas categorias para revisão manual antes de criar
     no GLPI e sincronizar via CSV.
+    
+    Pode ser criada a partir de:
+    - Ticket real (source='ticket'): quando um ticket é classificado
+    - Preview manual (source='preview'): quando usuário testa via endpoint de preview
     """
     
     STATUS_CHOICES = [
@@ -144,8 +150,17 @@ class CategorySuggestion(models.Model):
     ticket = models.ForeignKey(
         Ticket,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name='category_suggestions',
-        help_text="Ticket que gerou esta sugestão"
+        help_text="Ticket que gerou esta sugestão (opcional para previews)"
+    )
+    
+    source = models.CharField(
+        max_length=20,
+        choices=SUGGESTION_SOURCE_CHOICES,
+        default='ticket',
+        help_text="Origem da sugestão: ticket real ou preview manual"
     )
     
     suggested_path = models.CharField(
@@ -193,7 +208,9 @@ class CategorySuggestion(models.Model):
         verbose_name_plural = 'Sugestões de Categorias'
 
     def __str__(self):
-        return f"{self.suggested_path} (Ticket #{self.ticket.id})"
+        if self.ticket:
+            return f"{self.suggested_path} (Ticket #{self.ticket.id})"
+        return f"{self.suggested_path} (Preview)"
 
 
 class SatisfactionSurvey(models.Model):
@@ -305,3 +322,56 @@ class SatisfactionSurvey(models.Model):
     
     def __str__(self):
         return f"Pesquisa Ticket #{self.ticket.id} - {self.rating}/5 ({self.created_at.strftime('%d/%m/%Y %H:%M')})"
+
+
+class KnowledgeBaseArticle(models.Model):
+    """
+    Artigo de Base de Conhecimento gerado pela IA.
+    
+    Armazena artigos de Base de Conhecimento gerados usando Google Gemini AI,
+    permitindo revisão e reutilização posterior.
+    
+    Pode ser criado a partir de:
+    - Preview manual (source='preview'): quando usuário gera via endpoint
+    """
+    
+    article_type = models.CharField(
+        max_length=20,
+        choices=ARTICLE_TYPE_CHOICES,
+        help_text="Tipo do artigo (conceitual, operacional ou troubleshooting)"
+    )
+    
+    category = models.CharField(
+        max_length=1024,
+        help_text="Categoria da Base de Conhecimento (ex: 'RTV > AM > TI > Suporte > Técnicos > Jornal / Switcher')"
+    )
+    
+    context = models.TextField(
+        help_text="Contexto do ambiente usado para gerar o artigo"
+    )
+    
+    content = models.TextField(
+        help_text="Conteúdo completo do artigo em Markdown"
+    )
+    
+    content_html = models.TextField(
+        help_text="Conteúdo do artigo convertido para HTML"
+    )
+    
+    source = models.CharField(
+        max_length=20,
+        choices=KNOWLEDGE_BASE_ARTICLE_SOURCE_CHOICES,
+        default='preview',
+        help_text="Origem do artigo: preview manual"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Artigo de Base de Conhecimento'
+        verbose_name_plural = 'Artigos de Base de Conhecimento'
+    
+    def __str__(self):
+        return f"{self.article_type.title()} - {self.category} ({self.created_at.strftime('%d/%m/%Y')})"

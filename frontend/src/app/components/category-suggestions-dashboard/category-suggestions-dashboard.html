@@ -1,0 +1,41 @@
+<div class="dashboard-container">
+  <app-breadcrumb [items]="breadcrumbItems"></app-breadcrumb>
+  
+  <div class="header">
+    <h1>Dashboard - Sugestões de Categorias</h1>
+    <p class="subtitle">Gerencie sugestões de categorias geradas automaticamente a partir dos tickets do GLPI. Revise, aprove ou rejeite sugestões para organizar a estrutura de categorias.</p>
+  </div>
+
+  <app-loading [loading]="loading" message="Carregando estatísticas..."></app-loading>
+
+  @if (!loading && error) {
+    <!-- Error -->
+    <div class="error">
+      <p>{{ error }}</p>
+      <p-button
+        label="Tentar novamente"
+        (onClick)="loadStats()">
+      </p-button>
+    </div>
+  } @else if (stats && cards.length > 0) {
+    <!-- Dashboard Cards -->
+    <div class="dashboard-cards">
+      @for (card of cards; track card.status) {
+        <div 
+          class="dashboard-card"
+          [class.card-clickable]="card.count > 0"
+          [ngClass]="'card-' + card.color"
+          (click)="card.count > 0 && navigateToCard(card)">
+          <div class="card-icon">
+            <i [class]="card.icon"></i>
+          </div>
+          <div class="card-content">
+            <h2 class="card-title">{{ card.title }}</h2>
+            <p class="card-count">{{ card.count }}</p>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>
+

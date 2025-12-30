@@ -1,0 +1,67 @@
+/* =========================================================
+ * PRIMENG COMPONENT OVERRIDES
+ * Estilos globais para customização de componentes PrimeNG
+ * ========================================================= */
+
+/* =========================================================
+ * PLACEHOLDERS - Padronizado globalmente
+ * ========================================================= */
+.p-inputtext::placeholder,
+.p-inputtextarea::placeholder {
+  color: var(--text-color-secondary);
+  opacity: 0.5;
+}
+
+.p-inputtext::-webkit-input-placeholder,
+.p-inputtextarea::-webkit-input-placeholder {
+  color: var(--text-color-secondary);
+  opacity: 0.5;
+}
+
+.p-inputtext::-moz-placeholder,
+.p-inputtextarea::-moz-placeholder {
+  color: var(--text-color-secondary);
+  opacity: 0.5;
+}
+
+.p-inputtext:-ms-input-placeholder,
+.p-inputtextarea:-ms-input-placeholder {
+  color: var(--text-color-secondary);
+  opacity: 0.5;
+}
+
+/* =========================================================
+ * COMPONENTES DESABILITADOS - Padronizado globalmente
+ * Todos os componentes PrimeNG desabilitados usam a mesma cor
+ * ========================================================= */
+::ng-deep .p-select.p-disabled,
+::ng-deep .p-select.p-disabled .p-inputtext,
+::ng-deep .p-select.p-disabled .p-select-label,
+::ng-deep .p-select.p-disabled .p-select-trigger,
+::ng-deep .p-select.p-disabled .p-select-trigger-icon,
+::ng-deep .p-select.p-disabled input,
+::ng-deep .p-select.p-disabled .p-inputtext input,
+::ng-deep .p-select.p-disabled .p-inputtext input[disabled],
+::ng-deep .p-inputtext.p-disabled,
+::ng-deep .p-inputtext.p-disabled input,
+::ng-deep input.p-disabled.p-inputtext,
+::ng-deep input[disabled].p-inputtext,
+::ng-deep input[disabled].p-inputtext.p-component,
+::ng-deep .p-inputtextarea.p-disabled,
+::ng-deep .p-inputtextarea.p-disabled textarea,
+::ng-deep textarea.p-disabled.p-inputtextarea,
+::ng-deep textarea[disabled].p-inputtextarea,
+::ng-deep textarea[disabled].p-inputtextarea.p-component {
+  background-color: var(--bg-disabled) !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+  color: var(--text-color) !important;
+}
+
+/* =========================================================
+ * BOTÕES DESABILITADOS
+ * ========================================================= */
+::ng-deep .p-button:disabled {
+  cursor: not-allowed;
+}
+
