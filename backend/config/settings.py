@@ -195,6 +195,11 @@ ZOHO_REFRESH_TOKEN = os.getenv('ZOHO_REFRESH_TOKEN')  # Auto-criado no banco se 
 ZOHO_ORGANIZATION_ID = os.getenv('ZOHO_ORGANIZATION_ID')  # zoid (Organization ID) - opcional, mas recomendado
 ZOHO_API_DOMAIN = os.getenv('ZOHO_API_DOMAIN', 'https://www.zohoapis.com')
 
+# Twilio SMS (SSPR - OTP)
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')  # Número Twilio para envio de SMS (formato: +5511999999999)
+
 
 # =========================================================
 # DJANGO REST FRAMEWORK

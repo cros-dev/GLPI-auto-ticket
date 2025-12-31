@@ -1,9 +1,8 @@
 """
-Clients para integrações externas do app accounts.
+Clients para integrações externas do app accounts (SSPR).
 
-Contém clients para:
-- Zoho API (reset de senha)
-- Active Directory (futuro)
-- SMS providers (futuro)
+Este módulo contém clientes para comunicação com serviços externos:
+- Zoho: Autenticação OAuth e reset de senha
+- Twilio: Envio de SMS OTP
 """
 

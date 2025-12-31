@@ -4,9 +4,6 @@ Constantes e configurações do app accounts (SSPR).
 Centraliza todas as constantes usadas no módulo de autenticação e reset de senha.
 """
 
-# Sistemas suportados para reset de senha
-SUPPORTED_SYSTEMS = ['zoho', 'ad', 'both']
-
 # Choices para sistemas (usado em PasswordResetRequest - pode resetar em ambos)
 SYSTEM_CHOICES = [
     ('zoho', 'Zoho'),
@@ -27,12 +24,6 @@ RESET_REQUEST_EXPIRY_HOURS = 1
 # Limites de tentativas
 MAX_OTP_ATTEMPTS = 3
 MAX_RESET_REQUESTS_PER_HOUR = 3
-
-# Comprimento do código OTP
-OTP_CODE_LENGTH = 6
-
-# Métodos de envio de OTP
-OTP_METHODS = ['sms', 'email']
 
 # Choices para métodos de OTP
 OTP_METHOD_CHOICES = [

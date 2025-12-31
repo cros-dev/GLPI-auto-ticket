@@ -1,17 +1,15 @@
 """
 Configuração do admin para o app accounts (SSPR).
 
-Registra os models relacionados a reset de senha e integração com Zoho/AD.
+Registra os models relacionados a reset de senha e integração com Zoho.
 """
 from django.contrib import admin
+from django.contrib import messages
 from django.utils.html import mark_safe
 from django.utils import timezone
-from .models import ZohoToken, SystemAccount, PasswordResetRequest, OtpToken
-from .constants import (
-    RESET_REQUEST_STATUS_CHOICES,
-    OTP_STATUS_CHOICES,
-    SYSTEM_CHOICES
-)
+from datetime import timedelta
+from .models import ZohoToken, PasswordResetRequest, OtpToken
+from .constants import MAX_RESET_REQUESTS_PER_HOUR
 
 
 @admin.register(ZohoToken)
@@ -81,82 +79,35 @@ class ZohoTokenAdmin(admin.ModelAdmin):
     access_token_status.short_description = 'Status Access Token'
 
 
-@admin.register(SystemAccount)
-class SystemAccountAdmin(admin.ModelAdmin):
-    """
-    Configuração do admin para contas de sistema.
-    
-    Exibe vínculos entre usuários Django e contas externas (Zoho, AD).
-    """
-    list_display = ('id', 'user', 'system', 'zoho_email', 'ad_username', 'phone_number_display', 'created_at', 'updated_at')
-    list_filter = ('system', 'created_at')
-    search_fields = ('user__username', 'zoho_email', 'ad_username', 'phone_number')
-    readonly_fields = ('created_at', 'updated_at')
-    
-    fieldsets = (
-        ('Vínculo', {
-            'fields': (
-                'user',
-                'system',
-            )
-        }),
-        ('Credenciais Zoho', {
-            'fields': ('zoho_email',),
-            'description': 'Email da conta Zoho vinculada ao usuário.'
-        }),
-        ('Credenciais Active Directory', {
-            'fields': ('ad_username',),
-            'description': 'Username no Active Directory vinculado ao usuário.'
-        }),
-        ('Contato', {
-            'fields': ('phone_number',),
-            'description': 'Número de telefone para SMS OTP (formato internacional).'
-        }),
-        ('Metadados', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
-    )
-    
-    def phone_number_display(self, obj):
-        """Exibe número de telefone mascarado."""
-        if not obj.phone_number:
-            return "-"
-        # Mostra apenas últimos 4 dígitos
-        if len(obj.phone_number) > 4:
-            return f"****{obj.phone_number[-4:]}"
-        return "****"
-    phone_number_display.short_description = 'Telefone'
-
-
 @admin.register(PasswordResetRequest)
 class PasswordResetRequestAdmin(admin.ModelAdmin):
     """
     Configuração do admin para solicitações de reset de senha.
     
     Exibe solicitações de reset, permitindo acompanhar o processo
-    e identificar problemas.
+    e identificar problemas. Permite ações administrativas para
+    resetar limites e intervir em casos bloqueados.
     """
-    list_display = ('id', 'token_display', 'user', 'identifier', 'system', 'status', 'created_at', 'expires_at', 'completed_at')
+    list_display = ('id', 'token_display', 'identifier', 'system', 'status', 'created_at', 'expires_at', 'completed_at', 'recent_requests_count')
     list_filter = ('status', 'system', 'created_at', 'expires_at')
-    search_fields = ('token', 'identifier', 'user__username')
+    search_fields = ('token', 'identifier')
+    actions = ['reset_rate_limit', 'unlock_user', 'expire_old_requests']
     readonly_fields = (
         'token',
-        'user',
         'identifier',
         'system',
         'status',
         'created_at',
         'expires_at',
         'completed_at',
-        'otp_tokens_display'
+        'otp_tokens_display',
+        'recent_requests_info'
     )
     
     fieldsets = (
         ('Solicitação', {
             'fields': (
                 'token',
-                'user',
                 'identifier',
                 'system',
                 'status',
@@ -168,6 +119,10 @@ class PasswordResetRequestAdmin(admin.ModelAdmin):
                 'expires_at',
                 'completed_at',
             )
+        }),
+        ('Informações de Limite', {
+            'fields': ('recent_requests_info',),
+            'description': 'Informações sobre solicitações recentes deste usuário (última hora).'
         }),
         ('Tokens OTP Relacionados', {
             'fields': ('otp_tokens_display',),
@@ -201,12 +156,132 @@ class PasswordResetRequestAdmin(admin.ModelAdmin):
             html += f'<strong>Código:</strong> {otp.code} | '
             html += f'<strong>Método:</strong> {otp.method} | '
             html += f'<strong>Status:</strong> <span style="color: {status_color};">{otp.get_status_display()}</span> | '
+            html += f'<strong>Tentativas:</strong> {otp.attempts} | '
             html += f'<strong>Criado:</strong> {otp.created_at.strftime("%d/%m/%Y %H:%M")}'
             html += f'</li>'
         html += "</ul>"
         
         return mark_safe(html)
     otp_tokens_display.short_description = 'Tokens OTP'
+    
+    def recent_requests_count(self, obj):
+        """Exibe contagem de solicitações recentes (última hora) para este usuário."""
+        one_hour_ago = timezone.now() - timedelta(hours=1)
+        count = PasswordResetRequest.objects.filter(
+            identifier=obj.identifier,
+            created_at__gte=one_hour_ago
+        ).count()
+        
+        if count >= MAX_RESET_REQUESTS_PER_HOUR:
+            return mark_safe(f'<span style="color: #dc3545; font-weight: bold;">{count}/{MAX_RESET_REQUESTS_PER_HOUR} (BLOQUEADO)</span>')
+        return f'{count}/{MAX_RESET_REQUESTS_PER_HOUR}'
+    recent_requests_count.short_description = 'Solicitações (1h)'
+    
+    def recent_requests_info(self, obj):
+        """Exibe informações detalhadas sobre solicitações recentes."""
+        one_hour_ago = timezone.now() - timedelta(hours=1)
+        recent = PasswordResetRequest.objects.filter(
+            identifier=obj.identifier,
+            created_at__gte=one_hour_ago
+        ).order_by('-created_at')
+        
+        count = recent.count()
+        limit = MAX_RESET_REQUESTS_PER_HOUR
+        
+        html = f'<p><strong>Solicitações na última hora:</strong> {count}/{limit}</p>'
+        
+        if count >= limit:
+            html += '<p style="color: #dc3545; font-weight: bold;">⚠️ Usuário bloqueado (limite atingido)</p>'
+            html += '<p><em>Use a ação "🔓 Liberar usuário" para remover todas as solicitações e liberar imediatamente.</em></p>'
+        
+        if recent.exists():
+            html += '<ul style="margin-top: 10px;">'
+            for req in recent[:5]:  # Mostra apenas as 5 mais recentes
+                status_color = {
+                    'pending': '#ffc107',
+                    'otp_validated': '#17a2b8',
+                    'completed': '#28a745',
+                    'expired': '#6c757d',
+                    'failed': '#dc3545'
+                }.get(req.status, '#999')
+                
+                html += f'<li>'
+                html += f'<strong>#{req.id}</strong> - '
+                html += f'<span style="color: {status_color};">{req.get_status_display()}</span> - '
+                html += f'{req.created_at.strftime("%d/%m/%Y %H:%M:%S")}'
+                html += f'</li>'
+            html += '</ul>'
+        
+        return mark_safe(html)
+    recent_requests_info.short_description = 'Informações de Limite'
+    
+    @admin.action(description='Resetar limite de tentativas (apagar solicitações antigas)')
+    def reset_rate_limit(self, request, queryset):
+        """
+        Action para resetar limite de tentativas.
+        
+        Apaga solicitações antigas (mais de 1 hora) dos usuários selecionados,
+        permitindo que façam novas solicitações.
+        """
+        one_hour_ago = timezone.now() - timedelta(hours=1)
+        identifiers = queryset.values_list('identifier', flat=True).distinct()
+        
+        deleted_count = 0
+        for identifier in identifiers:
+            deleted = PasswordResetRequest.objects.filter(
+                identifier=identifier,
+                created_at__lt=one_hour_ago
+            ).delete()[0]
+            deleted_count += deleted
+        
+        self.message_user(
+            request,
+            f'Limite resetado para {len(identifiers)} usuário(s). {deleted_count} solicitação(ões) antiga(s) removida(s).',
+            messages.SUCCESS
+        )
+    
+    @admin.action(description='🔓 Liberar usuário (deletar TODAS as solicitações recentes)')
+    def unlock_user(self, request, queryset):
+        """
+        Action para liberar usuário bloqueado.
+        
+        Deleta TODAS as solicitações dos usuários selecionados (incluindo recentes),
+        permitindo que façam novas solicitações imediatamente.
+        
+        ⚠️ ATENÇÃO: Esta ação remove todas as solicitações, mesmo as recentes.
+        Use quando o usuário está bloqueado e precisa ser liberado imediatamente.
+        """
+        identifiers = queryset.values_list('identifier', flat=True).distinct()
+        
+        deleted_count = 0
+        for identifier in identifiers:
+            deleted = PasswordResetRequest.objects.filter(
+                identifier=identifier
+            ).delete()[0]
+            deleted_count += deleted
+        
+        self.message_user(
+            request,
+            f'✅ {len(identifiers)} usuário(s) liberado(s). {deleted_count} solicitação(ões) removida(s) (incluindo recentes).',
+            messages.SUCCESS
+        )
+    
+    @admin.action(description='Expirar solicitações antigas selecionadas')
+    def expire_old_requests(self, request, queryset):
+        """
+        Action para expirar solicitações antigas manualmente.
+        
+        Marca solicitações selecionadas como expiradas.
+        """
+        updated = queryset.filter(status__in=['pending', 'otp_validated']).update(
+            status='expired'
+        )
+        
+        self.message_user(
+            request,
+            f'{updated} solicitação(ões) marcada(s) como expirada(s).',
+            messages.SUCCESS
+        )
 
 
 @admin.register(OtpToken)
@@ -215,10 +290,12 @@ class OtpTokenAdmin(admin.ModelAdmin):
     Configuração do admin para tokens OTP.
     
     Exibe tokens OTP gerados para validação de reset de senha.
+    Permite ações administrativas para resetar tentativas.
     """
-    list_display = ('id', 'reset_request_link', 'code', 'method', 'status', 'attempts', 'created_at', 'expires_at')
+    list_display = ('id', 'reset_request_link', 'code', 'method', 'status', 'attempts', 'attempts_display', 'created_at', 'expires_at')
     list_filter = ('status', 'method', 'created_at', 'expires_at')
     search_fields = ('code', 'reset_request__token', 'reset_request__identifier')
+    actions = ['reset_attempts']
     readonly_fields = (
         'reset_request',
         'code',
@@ -268,3 +345,37 @@ class OtpTokenAdmin(admin.ModelAdmin):
         color = status_colors.get(obj.status, '#999')
         return mark_safe(f'<span style="color: {color}; font-weight: bold;">{obj.get_status_display()}</span>')
     status_display.short_description = 'Status (Visual)'
+    
+    def attempts_display(self, obj):
+        """Exibe tentativas com indicação visual se excedeu limite."""
+        from .constants import MAX_OTP_ATTEMPTS
+        if obj.attempts >= MAX_OTP_ATTEMPTS:
+            return mark_safe(f'<span style="color: #dc3545; font-weight: bold;">{obj.attempts}/{MAX_OTP_ATTEMPTS} (BLOQUEADO)</span>')
+        return f'{obj.attempts}/{MAX_OTP_ATTEMPTS}'
+    attempts_display.short_description = 'Tentativas'
+    
+    @admin.action(description='Resetar tentativas de OTP (permitir novas tentativas)')
+    def reset_attempts(self, request, queryset):
+        """
+        Action para resetar tentativas de OTP.
+        
+        Reseta o contador de tentativas e o status para 'pending',
+        permitindo que o usuário tente validar o OTP novamente.
+        """
+        from .constants import MAX_OTP_ATTEMPTS
+        
+        updated = queryset.filter(status='exceeded_attempts').update(
+            attempts=0,
+            status='pending'
+        )
+        
+        # Também reseta tentativas de tokens que ainda estão pendentes mas com muitas tentativas
+        queryset.filter(status='pending', attempts__gte=MAX_OTP_ATTEMPTS).update(
+            attempts=0
+        )
+        
+        self.message_user(
+            request,
+            f'{updated} token(s) OTP resetado(s). Usuários podem tentar validar novamente.',
+            messages.SUCCESS
+        )

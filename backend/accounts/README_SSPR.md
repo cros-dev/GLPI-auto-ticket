@@ -5,20 +5,27 @@
 ### ✅ **Fase 1: Estrutura Base - CONCLUÍDA**
 
 - [x] Models criados (`ZohoToken`, `SystemAccount`, `PasswordResetRequest`, `OtpToken`)
-- [x] Exceções customizadas (`ZohoException`, `OtpException`, `PasswordResetException`)
+- [x] Exceções customizadas (`ZohoException`)
 - [x] Constantes centralizadas
 - [x] `ZohoClient` com gerenciamento automático de tokens
 - [x] Configurações no `settings.py`
 - [x] Auto-criação de token do .env
 - [x] Documentação no `env.example`
 
+### ✅ **Fase 2: Services e API REST - CONCLUÍDA**
+
+- [x] Services de negócio (`request_password_reset`, `generate_otp`, `validate_otp`, `confirm_password_reset`)
+- [x] Serializers (validação de entrada e saída)
+- [x] Views/Endpoints REST (3 endpoints funcionais)
+- [x] URLs mapeadas
+- [x] Testes unitários (45 testes cobrindo services e models)
+
 ### 🚧 **Próximas Fases**
 
-- [ ] Services de negócio (`request_password_reset`, `generate_otp`, etc)
-- [ ] Serializers
-- [ ] Views/Endpoints
-- [ ] Integração SMS OTP
+- [ ] Integração SMS OTP (send_otp_sms ainda é placeholder)
+- [ ] Testes de integração/E2E dos endpoints
 - [ ] Frontend Angular
+- [ ] Integração AD (futuro)
 
 ---
 
@@ -107,12 +114,32 @@ Este método:
 
 ```python
 from accounts.clients.zoho_client import ZohoClient
+from accounts.exceptions import ZohoException
 
 # Inicializa client (usa settings automaticamente)
 client = ZohoClient()
 
 # Obtém access token (renova automaticamente se necessário)
 access_token = client.get_access_token()
+
+# Busca dados completos do usuário (novo método - retorna payload completo)
+try:
+    user_data = client.get_user_by_email("usuario@exemplo.com")
+    if user_data:
+        print(f"ZUID: {user_data.get('zuid')}")
+        print(f"Nome: {user_data.get('displayName')}")
+        print(f"Email Principal: {user_data.get('primaryEmailAddress')}")
+        # Acesso a todos os campos do payload (telefone, grupos, etc)
+except ZohoException as e:
+    print(f"Erro: {e.message}")
+
+# Busca apenas o ID do usuário (zuid) - método auxiliar
+try:
+    zuid = client.get_user_id_by_email("usuario@exemplo.com")
+    if zuid:
+        print(f"User ID: {zuid}")
+except ZohoException as e:
+    print(f"Erro: {e.message}")
 
 # Reseta senha de um usuário
 try:
@@ -133,32 +160,117 @@ except ZohoException as e:
 ```
 backend/accounts/
 ├── models.py                    # ZohoToken, SystemAccount, PasswordResetRequest, OtpToken
-├── exceptions.py                # ZohoException, OtpException, PasswordResetException
+├── exceptions.py                # ZohoException
 ├── constants.py                 # Constantes do módulo
-└── clients/
-    ├── __init__.py
-    └── zoho_client.py           # Cliente Zoho com gerenciamento automático de tokens
+├── services.py                  # Lógica de negócio (request, generate_otp, validate, confirm)
+├── serializers.py               # Serializers para API REST
+├── views.py                     # Views/Endpoints REST (3 endpoints)
+├── urls.py                      # URLs da API
+├── clients/
+│   ├── __init__.py
+│   └── zoho_client.py           # Cliente Zoho com gerenciamento automático de tokens
+├── parsers/
+│   ├── __init__.py
+│   └── zoho_error_parser.py     # Parser de erros da API Zoho
+└── tests/
+    ├── test_request_password_reset.py
+    ├── test_generate_otp.py
+    ├── test_validate_otp.py
+    ├── test_confirm_password_reset.py
+    └── test_models.py
+```
+
+---
+
+## 🔌 Endpoints da API
+
+### 1. Solicitar Reset de Senha
+```
+POST /api/accounts/password-reset/request/
+Content-Type: application/json
+
+{
+  "identifier": "usuario@exemplo.com",
+  "system": "zoho"
+}
+
+Response: 201 Created
+{
+  "message": "Código OTP enviado via SMS",
+  "data": {
+    "token": "...",
+    "identifier": "usuario@exemplo.com",
+    "system": "zoho",
+    "status": "pending",
+    "created_at": "...",
+    "expires_at": "..."
+  }
+}
+```
+
+### 2. Validar OTP
+```
+POST /api/accounts/password-reset/validate-otp/
+Content-Type: application/json
+
+{
+  "token": "token_da_solicitacao",
+  "otp_code": "123456"
+}
+
+Response: 200 OK
+{
+  "valid": true,
+  "token": "...",
+  "message": "OTP validado com sucesso..."
+}
+```
+
+### 3. Confirmar Reset de Senha
+```
+POST /api/accounts/password-reset/confirm/
+Content-Type: application/json
+
+{
+  "token": "token_da_solicitacao",
+  "new_password": "NovaSenh@123"
+}
+
+Response: 200 OK
+{
+  "success": true,
+  "message": "Senha resetada com sucesso!",
+  "identifier": "usuario@exemplo.com"
+}
 ```
 
 ---
 
 ## ⚠️ Próximos Passos
 
-1. **Implementar Services**:
-   - `request_password_reset()` - Inicia processo
-   - `generate_otp()` - Gera código OTP
-   - `send_otp_email()` - Envia OTP por email
-   - `validate_otp()` - Valida código
-   - `reset_password_zoho()` - Executa reset
+1. **Testar Endpoints**:
+   - Testar fluxo completo via Postman/HTTP client
+   - Validar integração entre endpoints
+   - Verificar tratamento de erros
 
-2. **Implementar Endpoints**:
-   - `POST /api/accounts/password-reset/request/`
-   - `POST /api/accounts/password-reset/validate-otp/`
-   - `POST /api/accounts/password-reset/confirm/`
+2. **Integrar SMS OTP**:
+   - Escolher provedor (Twilio, AWS SNS, etc)
+   - Implementar `send_otp_sms()` com integração real
+   - Adicionar credenciais no `.env`
 
-3. **Integrar SMS OTP** (Fase 2)
+3. **Frontend Angular**:
+   - Criar componentes de reset de senha
+   - Integrar com os endpoints
+   - Implementar UI/UX do fluxo
 
-4. **Integrar AD** (Fase 3)
+4. **Melhorias de Segurança**:
+   - Rate limiting nos endpoints
+   - Auditoria de tentativas
+   - Validação de senha forte (além do básico)
+
+5. **Integrar AD** (Futuro):
+   - Criar cliente AD similar ao ZohoClient
+   - Implementar reset de senha no AD
 
 ---
 

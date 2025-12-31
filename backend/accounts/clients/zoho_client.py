@@ -15,6 +15,7 @@ from django.utils import timezone
 from datetime import timedelta
 from ..models import ZohoToken
 from ..exceptions import ZohoException
+from ..parsers.zoho_error_parser import parse_zoho_error, extract_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class ZohoClient:
         Busca o token Zoho no banco de dados.
         
         Se não existir no banco, tenta criar automaticamente do .env.
+        Se existir mas for diferente do .env, atualiza com o valor do .env (fonte da verdade).
         
         Returns:
             Optional[ZohoToken]: Instância de ZohoToken ou None
@@ -58,19 +60,16 @@ class ZohoClient:
         if not self._zoho_token:
             self._zoho_token = ZohoToken.objects.first()
             
-            # Se não existe no banco, tenta criar do .env (auto-criação)
+            env_refresh_token = (
+                self.refresh_token or 
+                getattr(settings, 'ZOHO_REFRESH_TOKEN', None)
+            )
+            
             if not self._zoho_token:
-                refresh_token = (
-                    self.refresh_token or 
-                    getattr(settings, 'ZOHO_REFRESH_TOKEN', None)
-                )
-                
-                if refresh_token:
-                    # Scope será atualizado na primeira renovação do token
-                    # Por enquanto usa um valor padrão
+                if env_refresh_token:
                     self._zoho_token = ZohoToken.objects.create(
-                        refresh_token=refresh_token,
-                        scope='',  # Será preenchido na primeira renovação
+                        refresh_token=env_refresh_token,
+                        scope='',
                         api_domain=getattr(
                             settings, 
                             'ZOHO_API_DOMAIN', 
@@ -78,6 +77,12 @@ class ZohoClient:
                         )
                     )
                     logger.info("ZohoToken criado automaticamente do .env")
+            elif env_refresh_token and self._zoho_token.refresh_token != env_refresh_token:
+                logger.info("Refresh token no banco diferente do .env. Atualizando com valor do .env (fonte da verdade)")
+                self._zoho_token.refresh_token = env_refresh_token
+                self._zoho_token.access_token = None
+                self._zoho_token.expires_at = None
+                self._zoho_token.save()
         
         return self._zoho_token
     
@@ -109,18 +114,27 @@ class ZohoClient:
         """
         zoho_token = self._get_zoho_token_from_db()
         
-        # Se não existe token no banco, precisa configurar primeiro
         if not zoho_token:
             logger.warning("ZohoToken não encontrado no banco. Configure o refresh_token primeiro.")
             return None
         
-        # Se o access token ainda é válido, retorna ele
         if zoho_token.is_access_token_valid():
             return zoho_token.access_token
         
-        # Se precisa renovar, faz refresh
         logger.info("Access token expirado. Renovando usando refresh token...")
-        return self.refresh_access_token()
+        new_token = self.refresh_access_token()
+        
+        if not new_token:
+            logger.error("Falha ao renovar access token")
+            return None
+        
+        self._zoho_token = None
+        zoho_token = self._get_zoho_token_from_db()
+        
+        if zoho_token and zoho_token.access_token:
+            return zoho_token.access_token
+        
+        return new_token
     
     def refresh_access_token(self) -> Optional[str]:
         """
@@ -154,68 +168,120 @@ class ZohoClient:
                 },
                 timeout=10
             )
-            response.raise_for_status()
-            data = response.json()
             
-            # Atualiza ou cria token no banco
+            try:
+                data = response.json()
+            except Exception as e:
+                logger.error(f"Erro ao parsear JSON da resposta: {e}")
+                raise ZohoException(
+                    'api_error',
+                    f'Resposta da API não é um JSON válido: {response.text[:200]}'
+                )
+            
+            if 'error' in data:
+                error_type = data.get('error', 'unknown_error')
+                error_description = data.get('error_description', '')
+                
+                if error_type == 'invalid_code':
+                    logger.error("Refresh token inválido ou expirado")
+                    raise ZohoException(
+                        'invalid_refresh_token',
+                        'Refresh token inválido ou expirado. Gere um novo refresh token em https://api-console.zoho.com/'
+                    )
+                else:
+                    logger.error(f"Erro na resposta da API: {error_type} - {error_description}")
+                    raise ZohoException(
+                        'api_error',
+                        f'Erro ao renovar token: {error_type} - {error_description}'
+                    )
+            
+            if response.status_code != 200:
+                logger.error(f"Erro ao renovar token: HTTP {response.status_code}")
+                raise ZohoException(
+                    'api_error',
+                    f'Erro ao renovar token: HTTP {response.status_code} - {response.text[:200]}'
+                )
+            
             zoho_token = self._get_zoho_token_from_db()
             if not zoho_token:
                 zoho_token = ZohoToken(refresh_token=refresh_token)
             
-            zoho_token.access_token = data.get('access_token')
+            access_token = data.get('access_token')
+            if not access_token:
+                logger.error(f"Resposta da API não contém access_token. Chaves: {list(data.keys())}")
+                raise ZohoException(
+                    'api_error',
+                    f'Resposta da API não contém access_token. Resposta: {data}'
+                )
+            
+            zoho_token.access_token = access_token
             zoho_token.scope = data.get('scope', '')
             zoho_token.api_domain = data.get('api_domain', 'https://www.zohoapis.com')
-            
-            # Calcula expiração (expires_in está em segundos)
             expires_in = data.get('expires_in', 3600)
             zoho_token.expires_at = timezone.now() + timedelta(seconds=expires_in)
-            
             zoho_token.save()
             
+            self._zoho_token = zoho_token
+            
             logger.info("Access token renovado com sucesso")
-            return zoho_token.access_token
+            return access_token
             
         except requests.RequestException as e:
-            error_type, error_message = self._parse_error(e, response if 'response' in locals() else None)
+            error_type, error_message = parse_zoho_error(e, response if 'response' in locals() else None)
             logger.error(f"Erro ao renovar access token: {error_type} - {str(e)}")
             raise ZohoException(error_type, error_message) from e
     
-    def get_organization_id(self) -> Optional[int]:
+    def _get_organization_id(self) -> Optional[int]:
         """
-        Obtém o ID da organização Zoho (zoid).
-        
-        Primeiro tenta obter do settings (.env), se não estiver configurado,
-        tenta buscar via API (pode não funcionar para contas comuns).
+        Obtém o ID da organização Zoho (zoid) do settings.
         
         Returns:
-            Optional[int]: ID da organização ou None se não conseguir obter
+            Optional[int]: ID da organização ou None se não estiver configurado
+        """
+        zoid_from_settings = getattr(settings, 'ZOHO_ORGANIZATION_ID', None)
+        if zoid_from_settings:
+            try:
+                return int(zoid_from_settings)
+            except (ValueError, TypeError):
+                logger.warning(f"ZOHO_ORGANIZATION_ID inválido no settings: {zoid_from_settings}")
+        return None
+    
+    def get_user_by_email(
+        self,
+        email: str,
+        zoid: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Obtém os dados completos do usuário pelo email.
+        
+        Faz uma requisição direta para o endpoint específico do usuário,
+        retornando o payload completo com todas as informações disponíveis.
+        
+        Args:
+            email: Email do usuário no Zoho
+            zoid: ID da organização (se None, busca automaticamente)
+            
+        Returns:
+            Optional[Dict[str, Any]]: Dados completos do usuário ou None se não encontrar.
+                Retorna o objeto 'data' do payload da API.
             
         Raises:
             ZohoException: Se houver erro na API do Zoho
         """
-        # Tenta obter do settings primeiro (recomendado)
-        zoid_from_settings = getattr(settings, 'ZOHO_ORGANIZATION_ID', None)
-        if zoid_from_settings:
-            try:
-                zoid = int(zoid_from_settings)
-                logger.info(f"Organization ID obtido do settings: {zoid}")
-                self._organization_id = zoid  # Cache
-                return zoid
-            except (ValueError, TypeError):
-                logger.warning(f"ZOHO_ORGANIZATION_ID inválido no settings: {zoid_from_settings}")
-        
-        # Se não está no settings, tenta buscar via API (pode falhar para contas comuns)
         access_token = self.get_access_token()
         if not access_token:
-            logger.warning("Não foi possível obter access token para buscar organization ID")
+            logger.warning("Não foi possível obter access token para buscar usuário")
             return None
         
+        if not zoid:
+            zoid = self._get_organization_id()
+            if not zoid:
+                logger.warning("ZOHO_ORGANIZATION_ID não configurado no .env")
+                return None
+        
         try:
-            # API para obter detalhes da organização
-            # GET https://mail.zoho.com/api/organization
-            # NOTA: Contas comuns podem não ter acesso a este endpoint
             response = requests.get(
-                "https://mail.zoho.com/api/organization",
+                f"https://mail.zoho.com/api/organization/{zoid}/accounts/{email}",
                 headers={
                     "Authorization": f"Zoho-oauthtoken {access_token}",
                     "Content-Type": "application/json"
@@ -225,101 +291,109 @@ class ZohoClient:
             
             if response.status_code == 200:
                 data = response.json()
-                # A resposta pode ter diferentes estruturas, verificar documentação
-                # Geralmente vem em data['data'][0]['zoid'] ou similar
-                if 'data' in data and len(data['data']) > 0:
-                    org_data = data['data'][0]
-                    zoid = org_data.get('zoid') or org_data.get('id')
-                    if zoid:
-                        zoid_int = int(zoid)
-                        logger.info(f"Organization ID obtido via API: {zoid_int}")
-                        self._organization_id = zoid_int  # Cache
-                        return zoid_int
+                if 'data' in data and data['data']:
+                    user_data = data['data']
+                    logger.info(f"Usuário encontrado para {email}: {user_data.get('zuid', 'N/A')}")
+                    return user_data
                 
-                # Tentar estrutura alternativa
-                if 'zoid' in data:
-                    zoid_int = int(data['zoid'])
-                    self._organization_id = zoid_int  # Cache
-                    return zoid_int
+                logger.warning(f"Resposta da API não contém dados do usuário para {email}")
+                return None
             
-            # Se falhou, retorna None (não é erro crítico se estiver no settings)
-            logger.warning(f"Não foi possível obter organization ID via API (status {response.status_code})")
-            logger.info("Configure ZOHO_ORGANIZATION_ID no .env para evitar buscar via API")
-            return None
+            if response.status_code == 401:
+                raise ZohoException(
+                    'unauthorized',
+                    'Token de autenticação inválido ao buscar usuário.'
+                )
+            
+            if response.status_code == 404:
+                logger.info(f"Usuário com email {email} não encontrado na organização")
+                return None
+            
+            if response.status_code == 403:
+                raise ZohoException(
+                    'forbidden',
+                    'Não tem permissão para buscar usuários. Verifique os scopes do token.'
+                )
+            
+            error_msg = f"Erro ao buscar usuário: HTTP {response.status_code}"
+            try:
+                error_data = response.json()
+                extracted_message = extract_error_message(error_data)
+                if extracted_message:
+                    error_msg = extracted_message
+            except:
+                pass
+            
+            logger.warning(f"Resposta inesperada ao buscar usuário: {response.status_code} - {error_msg}")
+            raise ZohoException('api_error', error_msg)
             
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Erro ao buscar organization ID via API: {e}")
-            logger.info("Configure ZOHO_ORGANIZATION_ID no .env para usar valor estático")
-            return None
+            logger.error(f"Erro ao buscar usuário: {e}")
+            raise ZohoException(
+                'api_error',
+                f'Erro ao comunicar com API do Zoho para obter dados do usuário: {str(e)}'
+            )
     
     def get_user_id_by_email(self, email: str, zoid: Optional[int] = None) -> Optional[int]:
         """
         Obtém o ID do usuário (zuid) pelo email.
+        
+        Utiliza o método get_user_by_email() internamente para obter
+        apenas o zuid do payload completo.
         
         Args:
             email: Email do usuário
             zoid: ID da organização (se None, busca automaticamente)
             
         Returns:
-            Optional[int]: ID do usuário ou None se não encontrar
+            Optional[int]: ID do usuário (zuid) ou None se não encontrar
             
         Raises:
             ZohoException: Se houver erro na API do Zoho
         """
-        access_token = self.get_access_token()
-        if not access_token:
-            logger.warning("Não foi possível obter access token para buscar user ID")
+        user_data = self.get_user_by_email(email, zoid)
+        if not user_data:
             return None
         
-        if not zoid:
-            zoid = self.get_organization_id()
-            if not zoid:
-                logger.warning("Não foi possível obter organization ID")
-                return None
+        zuid = user_data.get('zuid') or user_data.get('id')
+        if zuid:
+            return int(zuid)
         
-        try:
-            # API para buscar usuário por email na organização
-            # GET https://mail.zoho.com/api/organization/{zoid}/accounts?emailId={email}
-            response = requests.get(
-                f"https://mail.zoho.com/api/organization/{zoid}/accounts",
-                headers={
-                    "Authorization": f"Zoho-oauthtoken {access_token}",
-                    "Content-Type": "application/json"
-                },
-                params={"emailId": email},  # Filtrar por email diretamente
-                timeout=10
-            )
+        logger.warning(f"Payload do usuário não contém zuid para {email}")
+        return None
+    
+    def get_user_phone_by_email(
+        self,
+        email: str,
+        zoid: Optional[int] = None
+    ) -> Optional[str]:
+        """
+        Obtém o número de telefone do usuário pelo email.
+        
+        Utiliza o método get_user_by_email() internamente para obter
+        o telefone do payload completo.
+        
+        Args:
+            email: Email do usuário
+            zoid: ID da organização (se None, busca automaticamente)
             
-            if response.status_code == 200:
-                data = response.json()
-                # Buscar usuário pelo email
-                if 'data' in data:
-                    for user in data['data']:
-                        user_email = user.get('emailAddress') or user.get('email') or user.get('emailId')
-                        if user_email and user_email.lower() == email.lower():
-                            zuid = user.get('zuid') or user.get('id')
-                            if zuid:
-                                logger.info(f"User ID encontrado para {email}: {zuid}")
-                                return int(zuid)
-                
-                logger.warning(f"Usuário com email {email} não encontrado na organização")
-                return None
+        Returns:
+            Optional[str]: Número de telefone ou None se não encontrar
             
-            if response.status_code == 401:
-                raise ZohoException(
-                    'unauthorized',
-                    'Token de autenticação inválido ao buscar user ID.'
-                )
-            
-            logger.warning(f"Resposta inesperada ao buscar user ID: {response.status_code}")
+        Raises:
+            ZohoException: Se houver erro na API do Zoho
+        """
+        user_data = self.get_user_by_email(email, zoid)
+        if not user_data:
             return None
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Erro ao buscar user ID: {e}")
-            raise ZohoException(
-                'api_error',
-                f'Erro ao comunicar com API do Zoho para obter user ID: {str(e)}'
-            )
+        
+        phone_number = (
+            user_data.get('mobileNumber') or
+            user_data.get('phoneNumber') or
+            user_data.get('phoneNumer')
+        )
+        
+        return phone_number
     
     def reset_password(
         self,
@@ -332,6 +406,8 @@ class ZohoClient:
         Requer scope: ZohoMail.organization.accounts.ALL ou ZohoMail.organization.accounts.UPDATE
         
         Endpoint: PUT https://mail.zoho.com/api/organization/{zoid}/accounts/{zuid}
+        
+        O método busca automaticamente o zuid do usuário pelo email.
         
         Args:
             email: Email do usuário no Zoho
@@ -350,16 +426,14 @@ class ZohoClient:
                 'Não foi possível obter access token do Zoho. Verifique a configuração.'
             )
         
-        # Obter organization ID (zoid)
-        zoid = self.get_organization_id()
+        zoid = self._get_organization_id()
         if not zoid:
             raise ZohoException(
                 'organization_not_found',
-                'Não foi possível obter o ID da organização Zoho.'
+                'ZOHO_ORGANIZATION_ID não configurado no .env'
             )
         
-        # Obter user ID (zuid) pelo email
-        zuid = self.get_user_id_by_email(email, zoid)
+        zuid = self.get_user_id_by_email(email)
         if not zuid:
             raise ZohoException(
                 'user_not_found',
@@ -367,7 +441,6 @@ class ZohoClient:
             )
         
         try:
-            # PUT https://mail.zoho.com/api/organization/{zoid}/accounts/{zuid}
             response = requests.put(
                 f"https://mail.zoho.com/api/organization/{zoid}/accounts/{zuid}",
                 headers={
@@ -375,6 +448,7 @@ class ZohoClient:
                     "Content-Type": "application/json"
                 },
                 json={
+                    "zuid": zuid,
                     "password": new_password,
                     "mode": "resetPassword"
                 },
@@ -385,52 +459,34 @@ class ZohoClient:
                 logger.info(f"Senha resetada com sucesso para {email}")
                 return True
             
-            # Tratar erros específicos
-            if response.status_code == 400:
-                error_msg = "Parâmetros inválidos na requisição de reset de senha."
+            if response.status_code in [400, 401, 403, 404, 429] or response.status_code >= 500:
+                error_type, error_message = parse_zoho_error(
+                    Exception(f"HTTP {response.status_code}"),
+                    response
+                )
+                
                 try:
                     error_data = response.json()
-                    if 'message' in error_data:
-                        error_msg = error_data['message']
+                    extracted_message = extract_error_message(error_data)
+                    if extracted_message:
+                        error_message = extracted_message
                 except:
                     pass
-                raise ZohoException('invalid_request', error_msg)
+                
+                raise ZohoException(error_type, error_message)
             
-            if response.status_code == 401:
-                raise ZohoException(
-                    'unauthorized',
-                    'Token de autenticação inválido ou expirado. Verifique as credenciais.'
-                )
-            
-            if response.status_code == 403:
-                raise ZohoException(
-                    'forbidden',
-                    'Não tem permissão para resetar senhas. Verifique se o scope inclui ZohoMail.organization.accounts.ALL ou UPDATE.'
-                )
-            
-            if response.status_code == 404:
-                raise ZohoException(
-                    'user_not_found',
-                    f'Usuário não encontrado na organização Zoho.'
-                )
-            
-            # Outros erros
-            error_msg = f"Erro ao resetar senha: HTTP {response.status_code}"
-            try:
-                error_data = response.json()
-                if 'message' in error_data:
-                    error_msg = error_data['message']
-            except:
-                pass
-            
-            raise ZohoException('api_error', error_msg)
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Erro na requisição de reset de senha: {e}")
-            raise ZohoException(
-                'api_error',
-                f'Erro ao comunicar com API do Zoho: {str(e)}'
+            error_type, error_message = parse_zoho_error(
+                Exception(f"HTTP {response.status_code}"),
+                response
             )
+            raise ZohoException(error_type, error_message)
+            
+        except ZohoException:
+            raise
+        except requests.exceptions.RequestException as e:
+            error_type, error_message = parse_zoho_error(e, None)
+            logger.error(f"Erro na requisição de reset de senha: {e}")
+            raise ZohoException(error_type, error_message) from e
     
     def validate_user(self, email: str) -> bool:
         """
@@ -443,57 +499,8 @@ class ZohoClient:
             bool: True se usuário existe, False caso contrário
         """
         try:
-            zuid = self.get_user_id_by_email(email)
-            return zuid is not None
+            user_data = self.get_user_by_email(email)
+            return user_data is not None
         except ZohoException:
             return False
-    
-    def _parse_error(
-        self,
-        exception: Exception,
-        response: Optional[requests.Response] = None
-    ) -> tuple[str, str]:
-        """
-        Analisa exceções da API do Zoho e retorna informações específicas.
-        
-        Args:
-            exception: Exceção capturada
-            response: Response do requests (se disponível)
-            
-        Returns:
-            Tuple[str, str]: (tipo_erro, mensagem_amigavel)
-        """
-        error_str = str(exception)
-        error_lower = error_str.lower()
-        
-        # Se temos response, analisa status code
-        if response is not None:
-            status_code = response.status_code
-            
-            if status_code == 401:
-                return 'invalid_token', 'Token do Zoho inválido ou expirado. Verifique a configuração.'
-            
-            if status_code == 403:
-                return 'insufficient_permissions', 'Token do Zoho não tem permissões suficientes.'
-            
-            if status_code == 404:
-                return 'user_not_found', 'Usuário não encontrado no Zoho.'
-            
-            if status_code == 429:
-                return 'rate_limit_exceeded', 'Limite de requisições do Zoho excedido. Tente novamente mais tarde.'
-            
-            if status_code >= 500:
-                return 'service_unavailable', 'Serviço do Zoho indisponível. Tente novamente mais tarde.'
-        
-        # Análise por texto do erro
-        if 'refresh_token' in error_lower or 'invalid_grant' in error_lower:
-            return 'invalid_refresh_token', 'Refresh token do Zoho inválido. É necessário gerar um novo code.'
-        
-        if 'access_token' in error_lower or 'unauthorized' in error_lower:
-            return 'invalid_token', 'Token do Zoho inválido. Verifique a configuração.'
-        
-        if 'timeout' in error_lower:
-            return 'timeout', 'Timeout ao comunicar com a API do Zoho. Tente novamente.'
-        
-        return 'unknown', f'Erro ao comunicar com a API do Zoho: {error_str}'
 

@@ -3,7 +3,6 @@ Modelos de dados para o sistema de SSPR (Self-Service Password Reset).
 
 Este módulo contém os modelos principais:
 - ZohoToken: Armazena tokens OAuth do Zoho (refresh_token, access_token)
-- SystemAccount: Vincula usuários a contas externas (Zoho, AD)
 - PasswordResetRequest: Solicitações de reset de senha
 - OtpToken: Tokens OTP para validação (SMS ou email)
 """
@@ -245,8 +244,8 @@ class PasswordResetRequest(models.Model):
         if not self.token:
             self.generate_token()
         if not self.expires_at:
-            # Expira em 1 hora
-            self.expires_at = timezone.now() + timedelta(hours=1)
+            from .constants import RESET_REQUEST_EXPIRY_HOURS
+            self.expires_at = timezone.now() + timedelta(hours=RESET_REQUEST_EXPIRY_HOURS)
         super().save(*args, **kwargs)
 
 
@@ -333,12 +332,13 @@ class OtpToken(models.Model):
     
     def has_exceeded_attempts(self) -> bool:
         """
-        Verifica se excedeu o limite de tentativas (máximo 3).
+        Verifica se excedeu o limite de tentativas.
         
         Returns:
             bool: True se excedeu, False caso contrário
         """
-        return self.attempts >= 3
+        from .constants import MAX_OTP_ATTEMPTS
+        return self.attempts >= MAX_OTP_ATTEMPTS
     
     def increment_attempts(self):
         """Incrementa o contador de tentativas."""
@@ -352,6 +352,6 @@ class OtpToken(models.Model):
         if not self.code:
             self.generate_code()
         if not self.expires_at:
-            # Expira em 10 minutos
-            self.expires_at = timezone.now() + timedelta(minutes=10)
+            from .constants import OTP_EXPIRY_MINUTES
+            self.expires_at = timezone.now() + timedelta(minutes=OTP_EXPIRY_MINUTES)
         super().save(*args, **kwargs)
