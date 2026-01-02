@@ -1,0 +1,33 @@
+.success-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: var(--spacing-md);
+  background: var(--bg-color);
+}
+
+.success-card {
+  width: 100%;
+  max-width: 450px;
+  text-align: center;
+}
+
+.success-icon {
+  margin-bottom: var(--spacing-lg);
+}
+
+.success-icon i {
+  font-size: 4rem;
+  color: var(--primary-color);
+}
+
+h1 {
+  margin-bottom: var(--spacing-md);
+}
+
+.subtitle {
+  margin-bottom: var(--spacing-xl);
+  color: var(--text-color-secondary);
+}
+

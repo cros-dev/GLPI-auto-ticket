@@ -49,44 +49,71 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 ## Autenticação
 
-Todos os endpoints `/api/*` requerem autenticação por token DRF. Use o header:
+Todos os endpoints `/api/*` requerem autenticação JWT. Use o header:
 
 ```
-Authorization: Token <seu_token_aqui>
+Authorization: Bearer <seu_access_token_aqui>
 ```
 
-**Token para n8n**: `b0cdfd8b96b6d643a94278785678483c44ce8e3c`
+### Obter tokens (Login)
 
-### Obter token
-
-Para obter um novo token, faça um POST em `/api/accounts/token/` com username e password:
+Para fazer login e obter access token e refresh token, faça um POST em `/api/token/`:
 
 ```powershell
-curl -X POST http://localhost:8000/api/accounts/token/ `
-  -H "Content-Type: application/x-www-form-urlencoded" `
-  -d "username=seu_usuario&password=sua_senha"
+curl -X POST http://localhost:8000/api/token/ `
+  -H "Content-Type: application/json" `
+  -d '{"username":"seu_usuario","password":"sua_senha"}'
 ```
 
 Resposta:
 ```json
-{"token":"<seu_token_aqui>"}
+{
+  "access": "<access_token_jwt>",
+  "refresh": "<refresh_token_jwt>"
+}
 ```
 
-Ou use o shell Django para gerar/consultar tokens:
+**Configuração:**
+- **Access Token**: Expira em **1 hora** - use para autenticar requisições
+- **Refresh Token**: Expira em **7 dias** - use para renovar access token
+
+### Renovar Access Token
+
+Quando o access token expirar, use o refresh token para obter um novo:
 
 ```powershell
-python manage.py shell
+curl -X POST http://localhost:8000/api/token/refresh/ `
+  -H "Content-Type: application/json" `
+  -d '{"refresh":"<seu_refresh_token_aqui>"}'
 ```
 
-Dentro do shell:
-```python
-from django.contrib.auth import get_user_model
-from rest_framework.authtoken.models import Token
+Resposta:
+```json
+{
+  "access": "<novo_access_token_jwt>"
+}
+```
 
-User = get_user_model()
-u = User.objects.get(username='seu_usuario')
-t, created = Token.objects.get_or_create(user=u)
-print(t.key)
+### Verificar Token
+
+Para verificar se um token é válido:
+
+```powershell
+curl -X POST http://localhost:8000/api/token/verify/ `
+  -H "Content-Type: application/json" `
+  -d '{"token":"<seu_token_aqui>"}'
+```
+
+Resposta (se válido):
+```json
+{}
+```
+
+Resposta (se inválido):
+```json
+{
+  "detail": "Token is invalid or expired"
+}
 ```
 
 ## Endpoints API implementados
@@ -97,12 +124,12 @@ print(t.key)
 - `POST /api/glpi/categories/sync-from-api/`
   - Sincroniza categorias diretamente da API Legacy do GLPI.
   - Busca todas as categorias ITIL e faz upsert no banco, preservando os IDs originais.
-  - Requer autenticação por token.
+  - Requer autenticação JWT.
   - Exemplo de uso:
 
 ```bash
 curl -X POST http://localhost:8000/api/glpi/categories/sync-from-api/ \
-  -H "Authorization: Token seu_token_aqui"
+  -H "Authorization: Bearer seu_access_token_aqui"
 ```
 
 - `POST /api/tickets/classify/`
@@ -273,7 +300,7 @@ O n8n deve enviar tickets do GLPI para o endpoint de webhook:
 
 **Headers**:
 ```
-Authorization: Token seu_token_aqui
+Authorization: Bearer seu_access_token_aqui
 Content-Type: application/json
 ```
 
@@ -303,7 +330,7 @@ Para sincronizar categorias do GLPI, o n8n pode chamar:
 
 **Headers**:
 ```
-Authorization: Token seu_token_aqui
+Authorization: Bearer seu_access_token_aqui
 ```
 
 Este endpoint busca todas as categorias ITIL diretamente da API Legacy do GLPI e sincroniza automaticamente.
@@ -313,19 +340,19 @@ Este endpoint busca todas as categorias ITIL diretamente da API Legacy do GLPI e
 **Listar categorias GLPI**:
 ```bash
 curl -X GET http://localhost:8000/api/glpi/categories/ \
-  -H "Authorization: Token seu_token_aqui"
+  -H "Authorization: Bearer seu_access_token_aqui"
 ```
 
 **Sincronizar categorias do GLPI (via API)**:
 ```bash
 curl -X POST http://localhost:8000/api/glpi/categories/sync-from-api/ \
-  -H "Authorization: Token seu_token_aqui"
+  -H "Authorization: Bearer seu_access_token_aqui"
 ```
 
 **Gerar prévia de sugestão de categoria**:
 ```powershell
 curl -X POST http://localhost:8000/api/category-suggestions/preview/ `
-  -H "Authorization: Token b0cdfd8b96b6d643a94278785678483c44ce8e3c" `
+  -H "Authorization: Bearer seu_access_token_aqui" `
   -H "Content-Type: application/json" `
   -d "{\"title\":\"Problema com impressora\",\"content\":\"A impressora não funciona\"}"
 ```
@@ -338,7 +365,7 @@ import requests
 
 url = "http://localhost:8000/api/tickets/classify/"
 headers = {
-    "Authorization": "Token seu_token_aqui",
+    "Authorization": "Bearer seu_access_token_aqui",
     "Content-Type": "application/json"
 }
 payload = {

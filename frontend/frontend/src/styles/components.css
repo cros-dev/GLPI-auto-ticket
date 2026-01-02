@@ -1,0 +1,30 @@
+/* =========================================================
+ * GLOBAL COMPONENT CLASSES
+ * Classes reutilizáveis para componentes comuns
+ * ========================================================= */
+
+/* Estados comuns (empty, error) */
+.empty {
+  padding: var(--spacing-xl);
+  color: var(--text-color-secondary);
+  text-align: left;
+}
+
+.error {
+  padding: var(--spacing-lg);
+  color: var(--text-color);
+  background-color: var(--app-surface-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+/* Cards */
+.card {
+  background: var(--app-surface-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+}
+

@@ -1,0 +1,22 @@
+/* =========================================================
+ * RESET / BASE STYLES
+ * Estilos base e reset do navegador
+ * ========================================================= */
+
+* {
+  font-family: var(--font-family);
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg-color);
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+}
+

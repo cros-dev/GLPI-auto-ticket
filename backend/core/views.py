@@ -222,8 +222,8 @@ class GlpiWebhookView(APIView):
     Endpoint: POST /api/glpi/webhook/ticket/
     Fluxo: GLPI → n8n → Django
     
-    Requer autenticação por token no header:
-    Authorization: Token <token_aqui>
+    Requer autenticação JWT no header:
+    Authorization: Bearer <access_token_aqui>
     
     Valida o payload, limpa o HTML do conteúdo e salva/atualiza o ticket
     no banco de dados local.

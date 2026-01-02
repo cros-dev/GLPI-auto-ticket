@@ -56,11 +56,10 @@ INSTALLED_APPS = [
 
     # Terceiros
     'rest_framework',
-    'rest_framework.authtoken',
+    'rest_framework_simplejwt',
     'corsheaders',
 
     # Apps locais
-    'accounts',
     'core',
 ]
 
@@ -188,17 +187,6 @@ N8N_CATEGORY_APPROVAL_WEBHOOK_URL = os.getenv('N8N_CATEGORY_APPROVAL_WEBHOOK_URL
 # IA - Google Gemini
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
-# Zoho API (SSPR)
-ZOHO_CLIENT_ID = os.getenv('ZOHO_CLIENT_ID')
-ZOHO_CLIENT_SECRET = os.getenv('ZOHO_CLIENT_SECRET')
-ZOHO_REFRESH_TOKEN = os.getenv('ZOHO_REFRESH_TOKEN')  # Auto-criado no banco se fornecido
-ZOHO_ORGANIZATION_ID = os.getenv('ZOHO_ORGANIZATION_ID')  # zoid (Organization ID) - opcional, mas recomendado
-ZOHO_API_DOMAIN = os.getenv('ZOHO_API_DOMAIN', 'https://www.zohoapis.com')
-
-# Twilio SMS (SSPR - OTP)
-TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
-TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
-TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')  # Número Twilio para envio de SMS (formato: +5511999999999)
 
 
 # =========================================================
@@ -210,12 +198,47 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+}
+
+
+# =========================================================
+# JWT CONFIGURATION
+# =========================================================
+
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),  # Token de acesso expira em 1 hora
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),  # Refresh token expira em 7 dias
+    'ROTATE_REFRESH_TOKENS': True,  # Gera novo refresh token a cada uso
+    'BLACKLIST_AFTER_ROTATION': True,  # Invalida refresh token antigo após rotação
+    'UPDATE_LAST_LOGIN': True,  # Atualiza last_login do usuário
+    
+    'ALGORITHM': 'HS256',  # Algoritmo de assinatura
+    'SIGNING_KEY': SECRET_KEY,  # Usa SECRET_KEY do Django
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+    
+    'AUTH_HEADER_TYPES': ('Bearer',),  # Tipo de header: Authorization: Bearer <token>
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    
+    'JTI_CLAIM': 'jti',  # JWT ID claim
+    
+    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
 

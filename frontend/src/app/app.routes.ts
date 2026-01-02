@@ -4,7 +4,6 @@ import { CategoryPreviewComponent } from './components/category-preview/category
 import { GlpiSyncComponent } from './components/glpi-sync/glpi-sync';
 import { KnowledgeBaseComponent } from './components/knowledge-base/knowledge-base';
 import { Login } from './components/login/login';
-import { PasswordResetComponent } from './components/password-reset/password-reset';
 import { MainLayoutComponent } from './layouts/main-layout/main-layout.component';
 import { authGuard } from './guards/auth.guard';
 
@@ -12,10 +11,6 @@ export const routes: Routes = [
   {
     path: 'login',
     component: Login
-  },
-  {
-    path: 'password-reset',
-    component: PasswordResetComponent
   },
   {
     path: '',
