@@ -11,6 +11,21 @@ SYSTEMS = [
     'word', 'teams', 'sharepoint', 'sap', 'erp', 'crm', 'bi', 'power bi'
 ]
 
+# Palavras-chave relacionadas a certificado digital
+CERTIFICATE_KEYWORDS = [
+    'certificado digital', 'certificado', 'e-cpf', 'e-cnpj', 'e-cpf', 'e-cnpj',
+    'token', 'atualizar certificado', 'renovar certificado', 'receita federal',
+    'site da receita', 'acesso ao site da receita', 'certificado expirado'
+]
+
+# Palavras-chave que indicam que o ticket é sobre instalação/uso de software
+SOFTWARE_INSTALLATION_KEYWORDS = [
+    'instalar', 'instalação', 'instalacao', 'instalar software', 'instalar programa',
+    'instalar aplicativo', 'instalar app', 'adobe', 'office', 'photoshop', 'illustrator',
+    'instalar microsoft', 'instalar windows', 'instalar excel', 'instalar word',
+    'instalar powerpoint', 'licença', 'licenciamento', 'ativar software'
+]
+
 # Palavras-chave relacionadas a eventos/montagem de setup
 EVENT_KEYWORDS = [
     'transmissão', 'transmissao', 'vídeo conferência', 'video conferencia', 

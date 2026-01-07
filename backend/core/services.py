@@ -9,7 +9,7 @@ from typing import Optional, Dict, Tuple, List, Any
 from django.utils import timezone
 from .models import GlpiCategory, CategorySuggestion, Ticket, SatisfactionSurvey, KnowledgeBaseArticle
 from .prompts import get_classification_prompt, get_suggestion_prompt, get_knowledge_base_prompt
-from .constants import SYSTEMS, EVENT_KEYWORDS, GENERIC_CATEGORIES, VALID_ARTICLE_TYPES
+from .constants import SYSTEMS, EVENT_KEYWORDS, GENERIC_CATEGORIES, VALID_ARTICLE_TYPES, CERTIFICATE_KEYWORDS, SOFTWARE_INSTALLATION_KEYWORDS
 from .clients.gemini_client import GeminiClient
 from .exceptions import GeminiException
 from .parsers.gemini_response_parser import (
@@ -226,16 +226,25 @@ def _find_similar_category(
     Returns:
         Optional[str]: Caminho completo da categoria encontrada ou None
     """
+    is_software_related = any(term in ticket_text for term in SOFTWARE_INSTALLATION_KEYWORDS)
+    is_certificate_related = any(term in ticket_text for term in CERTIFICATE_KEYWORDS)
+    
     for term in search_terms:
         if term in ticket_text:
+            if is_certificate_related:
+                continue
+            
             categories = GlpiCategory.objects.filter(full_path__icontains=term)
             for cat in categories:
                 path = get_category_path(cat)
                 if len(path) >= min_levels:
                     full_path = ' > '.join(path)
+                    full_path_lower = full_path.lower()
+                    
+                    if 'software' in full_path_lower and not is_software_related:
+                        continue
                     
                     if path_filters:
-                        full_path_lower = full_path.lower()
                         if not any(filter_term in full_path_lower for filter_term in path_filters):
                             continue
                     
@@ -286,12 +295,30 @@ def _get_similar_categories_for_reference(ticket_text: str) -> List[str]:
     """
     similar_categories = []
     
+    is_certificate_related = any(term in ticket_text for term in CERTIFICATE_KEYWORDS)
+    is_software_related = any(term in ticket_text for term in SOFTWARE_INSTALLATION_KEYWORDS)
+    
+    if is_certificate_related:
+        for cat in GlpiCategory.objects.filter(full_path__icontains='certificado'):
+            path = get_category_path(cat)
+            if len(path) >= 4:
+                similar_categories.append(' > '.join(path))
+        if not similar_categories:
+            for cat in GlpiCategory.objects.filter(full_path__icontains='acesso'):
+                path = get_category_path(cat)
+                if len(path) >= 4:
+                    similar_categories.append(' > '.join(path))
+        return similar_categories[:5]
+    
     for system in SYSTEMS:
         if system in ticket_text:
             for cat in GlpiCategory.objects.filter(full_path__icontains=system):
                 path = get_category_path(cat)
                 if len(path) >= 4:
-                    similar_categories.append(' > '.join(path))
+                    full_path = ' > '.join(path)
+                    if 'software' in full_path.lower() and not is_software_related:
+                        continue
+                    similar_categories.append(full_path)
     
     for keyword in EVENT_KEYWORDS:
         if keyword in ticket_text:
@@ -429,6 +456,30 @@ def generate_category_suggestion(
     
     ticket_text = f"{title} {content}".lower()
     
+    is_certificate_related = any(term in ticket_text for term in CERTIFICATE_KEYWORDS)
+    
+    if is_certificate_related:
+        for cat in GlpiCategory.objects.filter(full_path__icontains='certificado'):
+            path = get_category_path(cat)
+            if len(path) >= 4:
+                full_path = ' > '.join(path)
+                logger.info(f"Categoria de certificado encontrada: {full_path}")
+                return full_path
+        
+        for cat in GlpiCategory.objects.filter(full_path__icontains='acesso'):
+            path = get_category_path(cat)
+            full_path = ' > '.join(path)
+            full_path_lower = full_path.lower()
+            
+            if any(system in full_path_lower for system in ['anews', 'arion', 'glpi', 'sap', 'salesforce']):
+                continue
+            
+            if len(path) >= 4:
+                logger.info(f"Categoria de acesso encontrada para certificado: {full_path}")
+                return full_path
+        
+        return None
+    
     similar_category = _find_similar_category_by_systems(ticket_text)
     if similar_category:
         return similar_category
@@ -440,6 +491,11 @@ def generate_category_suggestion(
     try:
         categories_text = get_categories_for_ai()
         similar_categories = _get_similar_categories_for_reference(ticket_text)
+        
+        if is_certificate_related:
+            similar_categories = [cat for cat in similar_categories if not any(system in cat.lower() for system in ['anews', 'arion', 'glpi', 'sap', 'salesforce', 'outlook', 'excel', 'word', 'teams'])]
+            logger.info(f"Categorias similares filtradas para certificado: {similar_categories}")
+        
         prompt = get_suggestion_prompt(categories_text, similar_categories, title, content)
         response_text = client.generate_content(prompt)
         
@@ -545,7 +601,8 @@ def save_preview_suggestion(
 def classify_ticket(
     title: str,
     content: str,
-    ticket_id: Optional[int] = None
+    ticket_id: Optional[int] = None,
+    force_regenerate: bool = False
 ) -> Optional[Dict[str, Any]]:
     """
     Classifica um ticket usando Google Gemini AI.
@@ -556,6 +613,7 @@ def classify_ticket(
         title: Título do ticket
         content: Conteúdo/descrição do ticket
         ticket_id: ID do ticket para vincular sugestões (opcional)
+        force_regenerate: Se True, força regeneração mesmo se já existir sugestão aprovada
         
     Returns:
         Optional[Dict[str, Any]]: Dicionário com:
@@ -564,6 +622,17 @@ def classify_ticket(
             - 'confidence': 'high' (quando IA responde)
         Retorna None se nenhuma classificação for possível.
     """
+    if ticket_id and not force_regenerate:
+        approved_suggestion = CategorySuggestion.objects.filter(
+            ticket_id=ticket_id,
+            status='approved',
+            source='ticket'
+        ).first()
+        
+        if approved_suggestion:
+            logger.info(f"Ticket {ticket_id} já possui sugestão aprovada: {approved_suggestion.suggested_path}. Pulando classificação.")
+            return None
+    
     result = classify_ticket_with_gemini(title, content)
     
     if isinstance(result, dict) and 'error' in result:

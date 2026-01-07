@@ -187,14 +187,17 @@ def get_suggestion_prompt(
     mandatory_analysis = """ANÁLISE OBRIGATÓRIA ANTES DE SUGERIR (SIGA ESTA ORDEM EXATA):
 1. O ticket menciona "evento", "transmissão", "vídeo conferência", "premiação", "cerimônia", "apoio", "solicitação de serviço - apoio", "acompanhamento de transmissão", "montagem", "setup", "auditório", "interação", "microfone", "câmera", "áudio", "vídeo"?
    → SEMPRE use: "TI > Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência"
-2. O ticket menciona instalação permanente de infraestrutura (servidor, rede permanente, nova infraestrutura)?
+2. O ticket menciona "certificado digital", "certificado", "e-CPF", "e-CNPJ", "token", "atualizar certificado", "renovar certificado", "site da receita", "receita federal", "acesso ao site da receita"?
+   → Use: "TI > Requisição > Acesso > Certificado Digital" ou "TI > Incidente > Acesso > Certificado Digital"
+3. O ticket menciona instalação permanente de infraestrutura (servidor, rede permanente, nova infraestrutura)?
    → Use: "TI > Mudança > Gestão de Mudança > Programada > Instalação de Equipamento"
-3. O ticket menciona problema com equipamento existente (não funciona, erro, travando, não liga)?
+4. O ticket menciona problema com equipamento existente (não funciona, erro, travando, não liga)?
    → Use: "TI > Incidente > Equipamentos"
-4. O ticket menciona solicitação de novo equipamento permanente (computador, impressora, servidor)?
+5. O ticket menciona solicitação de novo equipamento permanente (computador, impressora, servidor)?
    → Use: "TI > Requisição > Equipamentos > Hardware"
-5. O ticket menciona instalação de software (Adobe, Office, etc.)?
-   → Use: "TI > Requisição > Software > Instalação"""
+6. O ticket menciona instalação de software (Adobe, Office, etc.)?
+   → Use: "TI > Requisição > Software > Instalação > [Nome do Software]"
+   → Só use esta categoria se o ticket EXPLICITAMENTE mencionar instalação de software. NÃO confunda com certificado digital, acesso a sites, ou outros tipos de acesso."""
 
     suggestion_rules = """Analise o seguinte ticket e sugira uma categoria hierárquica seguindo o padrão:
 TI > [Incidente/Requisição/Mudança] > [Área] > [Subárea] > [Categoria Específica] > [Sistema/Aplicação quando aplicável]
@@ -226,8 +229,11 @@ Título: {title}
 Conteúdo: {content}
 Sugira APENAS o caminho completo da categoria seguindo o padrão acima.
 IMPORTANTE CRÍTICO:
-- Se há categorias similares listadas acima, use o nome EXATO e a ESTRUTURA EXATA como aparece nelas
+- Se há categorias similares listadas acima, use o nome EXATO e a ESTRUTURA EXATA como aparece nelas APENAS se fizer sentido no contexto do ticket
 - Para eventos/transmissões/apoio, SEMPRE use "TI > Requisição > Equipamentos > Hardware > Montagem de Setup > Transmissão/Vídeo Conferência"
+- Para certificado digital, use "TI > Requisição > Acesso > Certificado Digital" ou "TI > Incidente > Acesso > Certificado Digital"
+- NÃO confunda certificado digital com instalação de software - são coisas completamente diferentes
+- NÃO use categorias similares que mencionam software (ex: Adobe) se o ticket é sobre certificado digital, acesso a sites, ou outros tipos de acesso
 - NÃO invente categorias que não seguem o padrão hierárquico correto
 - NÃO confunda "Montagem de Setup" (temporário para eventos) com "Instalação de Equipamento" (permanente)
 Se não conseguir determinar, responda "Nenhuma".
